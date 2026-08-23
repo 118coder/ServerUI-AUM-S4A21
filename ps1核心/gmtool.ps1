@@ -6,7 +6,7 @@
 #    启动前先杀掉旧 DfoGmTool 进程
 #    以 sb 作为 --server-bin 参数 + 环境变量 DFO_GM_SERVER_BIN
 #    关键: 工作目录 = publish, ASP.NET 才能定位 wwwroot (否则页面 404)
-#    3 秒后自动打开 http://localhost:5050
+#    3 秒后自动打开 http://localhost:5051
 #  本文件为 UTF-8 (带 BOM), 由纯 ASCII 的 GM工具.bat 调用, 规避批处理中文乱码
 # ============================================================
 
@@ -81,11 +81,11 @@ try {
 }
 
 Write-Host ''
-Write-Host 'GM工具运行中, 浏览器访问: http://localhost:5050' -ForegroundColor Cyan
+Write-Host 'GM工具运行中, 浏览器访问: http://localhost:5051' -ForegroundColor Cyan
 Write-Host '3秒后自动打开浏览器...' -ForegroundColor DarkGray
 Start-Sleep -Seconds 3
-try { Start-Process 'http://localhost:5050' } catch {
-    Write-Host '浏览器未能自动打开, 请手动访问 http://localhost:5050' -ForegroundColor Yellow
+try { Start-Process 'http://localhost:5051' } catch {
+    Write-Host '浏览器未能自动打开, 请手动访问 http://localhost:5051' -ForegroundColor Yellow
 }
 
 Write-Host ''

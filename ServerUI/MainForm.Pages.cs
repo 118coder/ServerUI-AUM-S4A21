@@ -389,14 +389,14 @@ public partial class MainForm : AntdUI.Window
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "http://localhost:5050",
+                    FileName = "http://localhost:5051",
                     UseShellExecute = true
                 });
             }
             catch
             {
                 Lg("浏览器未能自动打开, 请手动访问"
-                    + " http://localhost:5050", Or);
+                    + " http://localhost:5051", Or);
             }
         });
     }
@@ -765,8 +765,8 @@ public partial class MainForm : AntdUI.Window
 
         // GM 工具 (本地)
         var link3 = LinkRow("GM 工具",
-            "http://localhost:5050",
-            "http://localhost:5050");
+            "http://localhost:5051",
+            "http://localhost:5051");
         g2.Controls.Add(link3, 0, 4);
         g2.SetColumnSpan(link3, 2);
         c2.Controls.Add(g2);
@@ -1109,7 +1109,7 @@ public partial class MainForm : AntdUI.Window
              "打开服务端实际读取的存档数据目录。\n\n位置：AUM管理组件\\ServerS4A21-AUM\\dist\\win-x64\\Data\n\n用途：\n· 直接查看/备份 inventory.db 数据库文件\n· 手动干预存档数据"),
             ("目录与工具",
              "GM工具的使用方式", "ToolOutlined", "GM工具",
-             "启动 DfoGmTool 网页管理后台。\n\n使用方法：\n  1. 点击后自动启动 GM 工具服务\n  2. 自动打开浏览器访问 http://localhost:5050\n\n提示：\n· GM 工具需先执行一次「开始更新」完成编译\n· 服务端数据目录（Data 与 Pvf）必须完整\n· 重复点击会自动重启 GM 工具"),
+             "启动 DfoGmTool 网页管理后台。\n\n使用方法：\n  1. 点击后自动启动 GM 工具服务\n  2. 自动打开浏览器访问 http://localhost:5051\n\n提示：\n· GM 工具需先执行一次「开始更新」完成编译\n· 服务端数据目录（Data 与 Pvf）必须完整\n· 重复点击会自动重启 GM 工具"),
 
             ("更新管理",
              "开始更新的方式", "ThunderboltOutlined", "开始更新（增量更新）",
