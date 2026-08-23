@@ -12,7 +12,7 @@ public class GitHubAdapter : IMirrorPlatform
 {
     public string Name => "GitHub";
 
-    const string TokenB64 = "WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0=";
+    const string TokenB64 = "WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=";
     const string Repo = "118coder/ServerS4A12.86JP";
     static string Token => Encoding.UTF8.GetString(Convert.FromBase64String(Encoding.UTF8.GetString(Convert.FromBase64String(TokenB64))));
 
@@ -175,7 +175,7 @@ public class GitHubAdapter : IMirrorPlatform
                 var releases = doc.RootElement.EnumerateArray()
                     .Select(r => (Id: r.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
                                   Tag: r.TryGetProperty("tag_name", out var t) ? t.GetString() : ""))
-                    .Where(r => r.Tag.StartsWith("ServerS4A12-"))
+                    .Where(r => r.Tag.StartsWith("ServerS4A21-"))
                     .OrderByDescending(r => r.Tag)
                     .ToList();
 
@@ -203,7 +203,7 @@ public class GitHubAdapter : IMirrorPlatform
                 var files = doc.RootElement.EnumerateArray()
                     .Select(f => (Name: f.TryGetProperty("name", out var n) ? n.GetString() : "",
                                   Sha: f.TryGetProperty("sha", out var s) ? s.GetString() : ""))
-                    .Where(f => f.Name.StartsWith("ServerS4A12-") && f.Name.EndsWith(".zip"))
+                    .Where(f => f.Name.StartsWith("ServerS4A21-") && f.Name.EndsWith(".zip"))
                     .OrderByDescending(f => f.Name)
                     .ToList();
 

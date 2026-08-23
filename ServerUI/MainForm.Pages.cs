@@ -215,7 +215,7 @@ public partial class MainForm : AntdUI.Window
         btPv.Click += (s, e) =>
         {
             Lg(">>> 打开PVF目录", Color.CornflowerBlue);
-            var dir = Path.Combine(_ad, "ServerS4A12-AUM", "dist",
+            var dir = Path.Combine(_ad, "ServerS4A21-AUM", "dist",
                 "win-x64", "Data", "Pvf");
             if (Directory.Exists(dir))
                 Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = dir, UseShellExecute = true });
@@ -230,7 +230,7 @@ public partial class MainForm : AntdUI.Window
         btMD = B("打开主存档", TTypeMini.Default, "DatabaseOutlined");
         btMD.Click += (s, e) =>
         {
-            var d = Path.Combine(_ad, "ServerS4A12-AUM",
+            var d = Path.Combine(_ad, "ServerS4A21-AUM",
                 "dist", "win-x64", "Data");
             if (Directory.Exists(d))
             {
@@ -351,7 +351,7 @@ public partial class MainForm : AntdUI.Window
             return;
         }
 
-        var sb = Path.Combine(_ad, "ServerS4A12-AUM",
+        var sb = Path.Combine(_ad, "ServerS4A21-AUM",
             "dist", "win-x64");
         if (!File.Exists(Path.Combine(sb, "Data", "inventory.db"))
             || !File.Exists(Path.Combine(sb, "Data", "Pvf",
@@ -563,7 +563,7 @@ public partial class MainForm : AntdUI.Window
         var btMD2 = B("打开主存档", TTypeMini.Default, "DatabaseOutlined");
         btMD2.Click += (s, e) =>
         {
-            var d = Path.Combine(_ad, "ServerS4A12-AUM",
+            var d = Path.Combine(_ad, "ServerS4A21-AUM",
                 "dist", "win-x64", "Data");
             if (Directory.Exists(d))
             {
@@ -688,14 +688,14 @@ public partial class MainForm : AntdUI.Window
 
         var appName = new AntdUI.Label
         {
-            Text = "ServerS4A12 管理器",
+            Text = "ServerS4A21 管理器",
             Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
         var verLb = new AntdUI.Label
         {
-            Text = "v" + VER + " · ServerS4A12-AUM",
+            Text = "v" + VER + " · ServerS4A21-AUM",
             Font = new Font("Microsoft YaHei UI", 9.5f),
             ForeColor = Color.FromArgb(130, 130, 130),
             Dock = DockStyle.Fill,
@@ -744,22 +744,22 @@ public partial class MainForm : AntdUI.Window
 
         // ServerUI-仓库
         var link1 = LinkRow("ServerUI-仓库",
-            "github.com/118coder/ServerUI-AUM-S4A12",
-            "https://github.com/118coder/ServerUI-AUM-S4A12");
+            "github.com/118coder/ServerUI-AUM-S4A21",
+            "https://github.com/118coder/ServerUI-AUM-S4A21");
         g2.Controls.Add(link1, 0, 1);
         g2.SetColumnSpan(link1, 2);
 
         // 86JP-主源仓库
-        var link2 = LinkRow("86JP-主源仓库",
-            "gitgud.io/rewio/86JP",
-            "https://gitgud.io/rewio/86JP");
+        var link2 = LinkRow("ServerS4A21-主源仓库",
+            "gitgud.io/rewio/ServerS4A21",
+            "https://gitgud.io/rewio/ServerS4A21");
         g2.Controls.Add(link2, 0, 2);
         g2.SetColumnSpan(link2, 2);
 
         // GM工具-主源仓库
         var link4 = LinkRow("GM工具-主源仓库",
-            "gitgud.io/rewio/86JPGMTool",
-            "https://gitgud.io/rewio/86JPGMTool");
+            "gitgud.io/rewio/S4A21GmTool",
+            "https://gitgud.io/rewio/S4A21GmTool");
         g2.Controls.Add(link4, 0, 3);
         g2.SetColumnSpan(link4, 2);
 
@@ -1102,10 +1102,10 @@ public partial class MainForm : AntdUI.Window
 
             ("目录与工具",
              "打开PVF目录的方式", "FolderOpenOutlined", "打开PVF目录",
-             "打开服务端的 Pvf 文件夹。\n\n位置：AUM管理组件\\ServerS4A12-AUM\\dist\\win-x64\\Data\\Pvf\n\n用途：\n· 查看或替换游戏资源脚本（Script.pvf）\n· 排查资源加载问题"),
+             "打开服务端的 Pvf 文件夹。\n\n位置：AUM管理组件\\ServerS4A21-AUM\\dist\\win-x64\\Data\\Pvf\n\n用途：\n· 查看或替换游戏资源脚本（Script.pvf）\n· 排查资源加载问题"),
             ("目录与工具",
              "打开主存档的方式", "DatabaseOutlined", "打开主存档",
-             "打开服务端实际读取的存档数据目录。\n\n位置：AUM管理组件\\ServerS4A12-AUM\\dist\\win-x64\\Data\n\n用途：\n· 直接查看/备份 inventory.db 数据库文件\n· 手动干预存档数据"),
+             "打开服务端实际读取的存档数据目录。\n\n位置：AUM管理组件\\ServerS4A21-AUM\\dist\\win-x64\\Data\n\n用途：\n· 直接查看/备份 inventory.db 数据库文件\n· 手动干预存档数据"),
             ("目录与工具",
              "GM工具的使用方式", "ToolOutlined", "GM工具",
              "启动 DfoGmTool 网页管理后台。\n\n使用方法：\n  1. 点击后自动启动 GM 工具服务\n  2. 自动打开浏览器访问 http://localhost:5050\n\n提示：\n· GM 工具需先执行一次「开始更新」完成编译\n· 服务端数据目录（Data 与 Pvf）必须完整\n· 重复点击会自动重启 GM 工具"),

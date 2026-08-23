@@ -1,6 +1,6 @@
 /*
  * ==================================================================
- *     主窗口类 — 核心框架 (MainForm.cs) — ServerS4A12 GUI 管理器
+* 主窗口类 — 核心框架 (MainForm.cs) — ServerS4A21 GUI 管理器
  * ==================================================================
  *
  * 【v2.0 UI 重设计说明】
@@ -61,9 +61,9 @@ public partial class MainForm : AntdUI.Window
 
     // VER = 当前工具版本号 — 显示在窗口标题和启动日志中
 #if NET48
-    internal const string VER = "2.033-V";   // Win7 兼容模式
+    internal const string VER = "2.034-V";   // Win7 兼容模式
 #else
-    internal const string VER = "2.033";
+    internal const string VER = "2.034";
 #endif
 
     // ===== 路径计算 =====
@@ -176,7 +176,7 @@ public partial class MainForm : AntdUI.Window
         Size = new Size(1280, 840);           // 默认启动大小
         StartPosition = FormStartPosition.CenterScreen;
         ControlBox = false;
-        Text = "ServerS4A12 管理器 v" + VER; // 窗口标题 (任务栏显示)
+        Text = "ServerS4A21 管理器 v" + VER; // 窗口标题 (任务栏显示)
         Font = new Font("Microsoft YaHei UI", 10f);
 
         // 拖放支持 — 让用户可以拖 .db 文件到窗口换挡
@@ -580,8 +580,8 @@ public partial class MainForm : AntdUI.Window
         hd = new AntdUI.PageHeader
         {
             Dock = DockStyle.Fill,
-            Text = "ServerS4A12 管理器",
-            SubText = "v" + VER + " · ServerS4A12-AUM",
+            Text = "ServerS4A21 管理器",
+            SubText = "v" + VER + " · ServerS4A21-AUM",
             ShowIcon = true,
             ShowButton = true,
             DividerShow = true

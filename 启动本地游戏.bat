@@ -23,10 +23,10 @@ echo.
 
 echo [查找] start-server.bat...
 set "SRV_BAT="
-for /f "delims=" %%i in ('dir /s /b "%BASE%ServerS4A12-AUM\start-server.bat" 2^>nul') do set "SRV_BAT=%%i"
+for /f "delims=" %%i in ('dir /s /b "%BASE%ServerS4A21-AUM\start-server.bat" 2^>nul') do set "SRV_BAT=%%i"
 if not defined SRV_BAT (
     echo [错误] 未找到 start-server.bat
-    echo   请确认 ServerS4A12-AUM 目录下存在 start-server.bat
+    echo   请确认 ServerS4A21-AUM 目录下存在 start-server.bat
     echo   如果不存在，请在 ServerUI 中执行一次更新。
     pause
     exit /b

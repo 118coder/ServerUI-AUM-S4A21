@@ -1,4 +1,4 @@
-# ServerS4A12 管理工具包
+# ServerS4A21 管理工具包
 
 [AGPL v3.0] [.NET 10.0] [Windows 10/11]
 
@@ -6,7 +6,7 @@
 
 ## 项目简介
 
-为 ServerS4A12 服务端模拟器打造的全功能管理套件，专为非技术用户设计，无需了解 .NET SDK、PowerShell 或服务端架构，即可轻松完成：
+为 ServerS4A21 服务端模拟器打造的全功能管理套件，专为非技术用户设计，无需了解 .NET SDK、PowerShell 或服务端架构，即可轻松完成：
 
 - **同步更新**：一键增量/全量更新，自动拉取最新源码并编译，失败可切换镜像下载
 - **存档管理**：切换/改名/导入/导出/备份，支持拖拽换挡，自动备份上限 10 个
@@ -62,7 +62,7 @@ ServerUI-完整发布包-v2.0/
 ```
 AUM管理组件\
 ├── ps1核心\                    # 更新 / 编译 / 存档等 PowerShell 核心脚本
-├── ServerS4A12-AUM\           # 服务端源码（dist\win-x64 为运行目录）
+├── ServerS4A21-AUM\           # 服务端源码（dist\win-x64 为运行目录）
 ├── dfogmtool\                 # GM工具源码
 ├── DX11补丁\ + DX12补丁\      # 渲染补丁（含 无水印 子目录）
 ├── dotnet-sdk\                # .NET 10 SDK 安装包
@@ -185,4 +185,4 @@ A: 服务端运行中会阻止存档操作，请先「停止服务端」。
 
 ---
 
-Copyright (c) 2026 ServerS4A12 Manager Contributors
+Copyright (c) 2026 ServerS4A21 Manager Contributors

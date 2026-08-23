@@ -2,7 +2,7 @@ chcp 65001
 @echo off
 cls
 echo ========================================
-echo   ServerS4A12 - 开始更新
+echo   ServerS4A21 - 开始更新
 echo ========================================
 echo.
 cd /d "%~dp0"

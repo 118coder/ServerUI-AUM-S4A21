@@ -55,7 +55,7 @@ public partial class MiniForm : AntdUI.Window
         Size = new Size(620, 470);
         StartPosition = FormStartPosition.CenterScreen;
         ControlBox = false;
-        Text = "ServerS4A12 极简模式";
+        Text = "ServerS4A21 极简模式";
         Font = new Font("Microsoft YaHei UI", 9.5f);
 
         FormClosing += (s, e) =>
@@ -113,7 +113,7 @@ public partial class MiniForm : AntdUI.Window
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
         var title = new AntdUI.Label
         {
-            Text = "极简模式 · ServerS4A12",
+            Text = "极简模式 · ServerS4A21",
             Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -372,7 +372,7 @@ public partial class MiniForm : AntdUI.Window
     {
         try
         {
-            var distDir = Path.Combine(_main._ad, "ServerS4A12-AUM",
+            var distDir = Path.Combine(_main._ad, "ServerS4A21-AUM",
                 "dist", "win-x64");
             bool running = _main._sv.IsBatRunning
                 && ServerService.IsDfoServerRunning(distDir);
@@ -380,7 +380,7 @@ public partial class MiniForm : AntdUI.Window
             lbStatus.ForeColor = running ? Gn : Rd;
 
             var pvfOk = _main._sv.PvfExists(
-                Path.Combine(_main._ad, "ServerS4A12-AUM"));
+                Path.Combine(_main._ad, "ServerS4A21-AUM"));
             lbPvf.Text = pvfOk ? "PVF: ● 已加载" : "PVF: ● 未找到";
             lbPvf.ForeColor = pvfOk ? Gn : Rd;
 

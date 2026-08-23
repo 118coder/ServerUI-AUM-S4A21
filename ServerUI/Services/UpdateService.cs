@@ -41,7 +41,7 @@ namespace ServerUI.Services;
 
 public class UpdateService
 {
-    const string RepositoryApi = "https://gitgud.io/api/v4/projects/rewio%2F86JP";
+    const string RepositoryApi = "https://gitgud.io/api/v4/projects/rewio%2FServerS4A21";
     const string ApiTokenB64 = "WjJkcGIxOUZkbUpmUmtScFpqRnNWVlJXUVZGcmR6QjZTMWRIT0RaTlVYQXhUMnBLYWxvelowc3VNREV1TVRBeFozVXhhMnBq";
     static string ApiToken
     {
@@ -231,7 +231,7 @@ public class UpdateService
      * 调用时机: 用户点击 [增量更新] 按钮
      * 
      * 参数:
-     *   workDir   — PowerShell 的工作目录（ServerS4A12-AUM 目录）
+     *   workDir   — PowerShell 的工作目录（ServerS4A21-AUM 目录）
      *   scriptDir — update.ps1 所在目录（AUM管理组件\）
      */
     public async Task RunIncremental(string workDir, string scriptDir, bool skipCommitLog = false, bool useMirror = false)

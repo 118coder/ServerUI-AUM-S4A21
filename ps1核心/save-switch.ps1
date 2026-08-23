@@ -3,7 +3,7 @@ $ErrorActionPreference = "Continue"
 $ScriptRoot = $PSScriptRoot
 if ((Get-Item $ScriptRoot).Name -eq 'ps1核心') { $ScriptRoot = (Get-Item $ScriptRoot).Parent.FullName }
 $SwitchDir = Join-Path $ScriptRoot "存档管理\切换库"
-$DataDir = Join-Path $ScriptRoot "ServerS4A12-AUM\dist\win-x64\Data"
+$DataDir = Join-Path $ScriptRoot "ServerS4A21-AUM\dist\win-x64\Data"
 $DbTarget = Join-Path $DataDir "inventory.db"
 $BackupDir = Join-Path $ScriptRoot "存档管理\备份存档"
 
@@ -65,7 +65,7 @@ if ($sel -eq "0" -or $sel -eq "") {
 }
 
 # v1.916: 检测并停止服务端
-function StopServer { & "$ScriptRoot\停止服务端.bat" 2>$null }
+function StopServer { & "$ScriptRoot\停止服务.bat" 2>$null }
 $wasRunning = (Get-Process -Name "DfoServer" -ErrorAction SilentlyContinue).Count -gt 0
 if ($wasRunning) {
     Write-Host "检测到服务端运行中，正在自动停止..."
@@ -105,7 +105,7 @@ if ($sel -eq "S" -or $sel -eq "s") {
 
     if ($wasRunning) {
         Write-Host "正在重启服务端..."
-        Start-Process -FilePath (Join-Path $ScriptRoot "ServerS4A12-AUM\start-server.bat") -WindowStyle Minimized
+        Start-Process -FilePath (Join-Path $ScriptRoot "ServerS4A21-AUM\start-server.bat") -WindowStyle Minimized
     }
     pause
     exit
@@ -168,6 +168,6 @@ Write-Host "========================================"
 if ($wasRunning) {
     Write-Host ""
     Write-Host "正在重启服务端..."
-    Start-Process -FilePath (Join-Path $ScriptRoot "ServerS4A12-AUM\start-server.bat") -WindowStyle Minimized
+    Start-Process -FilePath (Join-Path $ScriptRoot "ServerS4A21-AUM\start-server.bat") -WindowStyle Minimized
 }
 pause

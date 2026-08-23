@@ -15,7 +15,7 @@ public class MirrorUploadService
     const string GitGudTokenB64 = "WjJkcGIxOUZkbUpmUmtScFpqRnNWVlJXUVZGcmR6QjZTMWRIT0RaTlVYQXhUMnBLYWxvelowc3VNREV1TVRBeFozVXhhMnBq";
     static string GitGudToken => Decode2(GitGudTokenB64);
     const string GitHubRepo = "118coder/ServerS4A12.86JP";
-    const string GitGudZip = "https://gitgud.io/api/v4/projects/rewio%2F86JP/repository/archive.zip?sha=main";
+    const string GitGudZip = "https://gitgud.io/api/v4/projects/rewio%2FServerS4A21/repository/archive.zip?sha=master";
     const int LockTimeout = 600;
     const int MaxRetry = 3;
 
@@ -67,7 +67,7 @@ public class MirrorUploadService
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                 var resp = await new HttpClient { Timeout = TimeSpan.FromSeconds(3) }
-                    .GetAsync("https://gitgud.io/rewio/86JP", cts.Token);
+                    .GetAsync("https://gitgud.io/rewio/ServerS4A21", cts.Token);
                 hits++;
             }
             catch { }
@@ -86,7 +86,7 @@ public class MirrorUploadService
         {
             var req = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/repos/{GitHubRepo}");
-            req.Headers.Add("Authorization", "token " + Decode2("WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0="));
+            req.Headers.Add("Authorization", "token " + Decode2("WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0="));
             var resp = await _http.SendAsync(req);
             return resp.IsSuccessStatusCode;
         }
@@ -97,7 +97,7 @@ public class MirrorUploadService
     {
         var path = ".mirror-lock";
         var url = $"https://api.github.com/repos/{GitHubRepo}/contents/{path}";
-        var token = Decode2("WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0=");
+        var token = Decode2("WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=");
 
         for (int i = 0; i < MaxRetry; i++)
         {
@@ -183,7 +183,7 @@ public class MirrorUploadService
         try
         {
             var url = $"https://api.github.com/repos/{GitHubRepo}/contents/.mirror-lock";
-            var token = Decode2("WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0=");
+            var token = Decode2("WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=");
             var body = new { message = "释放上传锁", sha };
             var req = new HttpRequestMessage(HttpMethod.Delete, url);
             req.Headers.Add("Authorization", "token " + token);
@@ -200,7 +200,7 @@ public class MirrorUploadService
 
         var now = BeijingTime.Now;
         var commitCount = await GetGitGudCommitCount();
-        var pkgName = $"ServerS4A12-{now:yyyyMMdd}-{now:HHmm}-{commitCount}";
+        var pkgName = $"ServerS4A21-{now:yyyyMMdd}-{now:HHmm}-{commitCount}";
         OutputReceived?.Invoke($"[镜像] 包名: {pkgName}");
 
         try
@@ -234,8 +234,8 @@ public class MirrorUploadService
             {
                 var latestDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AUM管理组件", "latest");
                 if (!Directory.Exists(latestDir)) Directory.CreateDirectory(latestDir);
-                File.WriteAllBytes(Path.Combine(latestDir, "ServerS4A12-latest.zip"), zip);
-                OutputReceived?.Invoke("[镜像] 已更新本地缓存 ServerS4A12-latest.zip");
+                File.WriteAllBytes(Path.Combine(latestDir, "ServerS4A21-latest.zip"), zip);
+                OutputReceived?.Invoke("[镜像] 已更新本地缓存 ServerS4A21-latest.zip");
             }
             catch { }
 
@@ -348,7 +348,7 @@ public class MirrorUploadService
     {
         try
         {
-            var token = Decode2("WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0=");
+            var token = Decode2("WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=");
             var req = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/repos/{GitHubRepo}/contents/latest.json?ref=main&t="
                 + DateTimeOffset.UtcNow.ToUnixTimeSeconds());
@@ -383,7 +383,7 @@ public class MirrorUploadService
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
             client.DefaultRequestHeaders.Add("User-Agent", "ServerUI-Mirror");
             client.DefaultRequestHeaders.Add("PRIVATE-TOKEN", GitGudToken);
-            var baseUrl = "https://gitgud.io/api/v4/projects/rewio%2F86JP/repository/commits?ref_name=main&per_page=100&page=";
+            var baseUrl = "https://gitgud.io/api/v4/projects/rewio%2FServerS4A21/repository/commits?ref_name=master&per_page=100&page=";
             int total = 0, page = 1;
             while (true)
             {
@@ -406,7 +406,7 @@ public class MirrorUploadService
         {
             // v1.919: 从 GitGud 主源下载 GM 工具源码（与旧版参考脚本一致）
             var gmUrls = new[] {
-                "https://gitgud.io/api/v4/projects/rewio%2F86JPGMTool/repository/archive.zip?sha=main"
+                "https://gitgud.io/api/v4/projects/rewio%2FS4A21GmTool/repository/archive.zip?sha=master"
             };
             byte[] gmZip = null;
             foreach (var url in gmUrls)
@@ -436,15 +436,15 @@ public class MirrorUploadService
             {
                 var latestDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AUM管理组件", "latest");
                 if (!Directory.Exists(latestDir)) Directory.CreateDirectory(latestDir);
-                File.WriteAllBytes(Path.Combine(latestDir, "DfoGmTool-latest.zip"), gmZip);
+                File.WriteAllBytes(Path.Combine(latestDir, "ServerS4A21-GMTool-latest.zip"), gmZip);
             }
             catch { }
 
             try
             {
-                var token = Decode2("WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0=");
+                var token = Decode2("WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=");
                 var req = new HttpRequestMessage(HttpMethod.Get,
-                    $"https://api.github.com/repos/{GitHubRepo}/contents/mirrors/DfoGmTool-latest.zip?ref=main");
+                    $"https://api.github.com/repos/{GitHubRepo}/contents/mirrors/ServerS4A21-GMTool-latest.zip?ref=main");
                 req.Headers.Add("Authorization", "token " + token);
                 var resp = await _http.SendAsync(req);
                 if (resp.IsSuccessStatusCode)
@@ -465,7 +465,7 @@ public class MirrorUploadService
             }
             catch { }
 
-            var gmPkg = "DfoGmTool-" + BeijingTime.Now.ToString("yyyyMMdd") + "-" + shaPrefix;
+            var gmPkg = "ServerS4A21-GMTool-" + BeijingTime.Now.ToString("yyyyMMdd") + "-" + shaPrefix;
             var results = new System.Collections.Generic.Dictionary<string, bool>();
 
             foreach (var p in _platforms)
@@ -475,7 +475,7 @@ public class MirrorUploadService
             }
 
             foreach (var p in _platforms)
-                await p.UploadFileAsync("mirrors/DfoGmTool-latest.zip", gmZip, "GM latest");
+                await p.UploadFileAsync("mirrors/ServerS4A21-GMTool-latest.zip", gmZip, "GM latest");
 
             OutputReceived?.Invoke($"[镜像] GM镜像: {(results[GitHub.Name] || results[Codeberg.Name] || results[Gitee.Name] ? "OK" : "FAIL")}");
         }
@@ -490,7 +490,7 @@ public class MirrorUploadService
         try
         {
             foreach (var p in _platforms)
-                await p.UploadFileAsync("mirrors/ServerS4A12-latest.zip", zip, "更新 latest");
+                await p.UploadFileAsync("mirrors/ServerS4A21-latest.zip", zip, "更新 latest");
 
             OutputReceived?.Invoke("[镜像] latest 副本已更新");
         }
@@ -518,7 +518,7 @@ public class MirrorUploadService
             // 先检查 GitHub 上的 SHA 是否已相同（快速跳过）
             try
             {
-                var token = Decode2("WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0=");
+                var token = Decode2("WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=");
                 var req = new HttpRequestMessage(HttpMethod.Get,
                     $"https://api.github.com/repos/{GitHubRepo}/contents/mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt?ref=main");
                 req.Headers.Add("Authorization", "token " + token);

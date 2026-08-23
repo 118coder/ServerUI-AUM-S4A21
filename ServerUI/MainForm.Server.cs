@@ -131,8 +131,8 @@ public partial class MainForm : AntdUI.Window
     {
         var cacheDirs = new[]
         {
-            Path.Combine(_ad, "ServerS4A12-AUM", "Server", "DfoServer", "obj"),
-            Path.Combine(_ad, "ServerS4A12-AUM", "Server", "DfoServer", "bin"),
+            Path.Combine(_ad, "ServerS4A21-AUM", "Server", "DfoServer", "obj"),
+            Path.Combine(_ad, "ServerS4A21-AUM", "Server", "DfoServer", "bin"),
             Path.Combine(_ad, "dfogmtool", "obj"),
             Path.Combine(_ad, "dfogmtool", "bin")
         };
@@ -156,7 +156,7 @@ public partial class MainForm : AntdUI.Window
 
     void CleanUpdateTemp()
     {
-        var pattern = "ServerS4A12-*";
+        var pattern = "ServerS4A21-*";
         try
         {
             foreach (var dir in Directory.GetDirectories(Path.GetTempPath(), pattern))
@@ -180,7 +180,7 @@ public partial class MainForm : AntdUI.Window
      */
     void Go()
     {
-        _sv.Start(Path.Combine(_ad, "ServerS4A12-AUM"));
+        _sv.Start(Path.Combine(_ad, "ServerS4A21-AUM"));
         _ct.Start();
     }
 
@@ -922,7 +922,7 @@ public partial class MainForm : AntdUI.Window
      */
     void Rs()
     {
-        var distDir = Path.Combine(_ad, "ServerS4A12-AUM",
+        var distDir = Path.Combine(_ad, "ServerS4A21-AUM",
             "dist", "win-x64");
         bool bat = _sv.IsBatRunning;
         bool dfo = ServerService.IsDfoServerRunning(distDir);
@@ -964,7 +964,7 @@ public partial class MainForm : AntdUI.Window
 
         // 更新 PVF 状态
         var pvfOk = _sv.PvfExists(
-            Path.Combine(_ad, "ServerS4A12-AUM"));
+            Path.Combine(_ad, "ServerS4A21-AUM"));
         lbPv.Text = pvfOk ? "● 已加载" : "● 未找到";
         lbPv.ForeColor = pvfOk ? Gn : Rd;
 
@@ -1054,7 +1054,7 @@ public partial class MainForm : AntdUI.Window
         try
         {
             await _up.RunIncremental(
-                Path.Combine(_ad, "ServerS4A12-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
+                Path.Combine(_ad, "ServerS4A21-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
         }
         finally
         {
@@ -1100,7 +1100,7 @@ public partial class MainForm : AntdUI.Window
         try
         {
             await _up.RunFull(
-                Path.Combine(_ad, "ServerS4A12-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
+                Path.Combine(_ad, "ServerS4A21-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
         }
         finally
         {

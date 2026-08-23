@@ -22,7 +22,7 @@
  *     │           ├── inventory.db
  *     │           ├── inventory.db-shm
  *     │           └── inventory.db-wal
- *     └── ServerS4A12-AUM\
+ *     └── ServerS4A21-AUM\
  *         └── dist\win-x64\
  *             └── Data\
  *                 ├── inventory.db       ← DbPath — 服务端实际读取的主存档
@@ -59,7 +59,7 @@ public class ArchiveService
         Path.Combine(baseDir, "存档管理", "备份存档");
 
     private string DbPath(string baseDir) =>
-        Path.Combine(baseDir, "ServerS4A12-AUM", "dist", "win-x64", "Data", "inventory.db");
+        Path.Combine(baseDir, "ServerS4A21-AUM", "dist", "win-x64", "Data", "inventory.db");
 
     private string DataDir(string baseDir) =>
         Path.GetDirectoryName(DbPath(baseDir))!;
