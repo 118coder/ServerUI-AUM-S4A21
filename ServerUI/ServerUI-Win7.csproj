@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Win7 兼容模式: .NET Framework 4.8 (Win7 SP1 最高可运行版本) -->
+    <!-- 与 ServerUI.csproj 同目录, 自动包含同一份源码 (Compat.cs + #if NET48) -->
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ServerUI-Win7</AssemblyName>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Version>2.0.33</Version>
+    <AssemblyVersion>2.0.33.0</AssemblyVersion>
+    <FileVersion>2.0.33.0</FileVersion>
+    <InformationalVersion>2.033-V</InformationalVersion>
+    <ApplicationIcon>图标EXE.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- .NET Framework 4.8 需显式引用的框架程序集 -->
+    <Reference Include="Microsoft.VisualBasic" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AntdUI" Version="2.4.3" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" />
+    <!-- Costura.Fody: 依赖 DLL 全部嵌入, 单个 exe 即 Win7 兼容模式 -->
+    <PackageReference Include="Costura.Fody" Version="5.7.0" />
+    <PackageReference Include="Fody" Version="6.8.2" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

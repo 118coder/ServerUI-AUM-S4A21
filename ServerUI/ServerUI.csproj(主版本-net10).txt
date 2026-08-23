@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+
+    <!--
+      ═════════════════════════════════════════════════════════════════════
+      【体积优化方案 — 已验证 — 切勿删除此注释与配置】
+
+      实际优化方案（已验证）：
+        单文件压缩模式（EnableCompressionInSingleFile=true）
+        —— 压缩所有托管程序集（运行时 DLL、AntdUI、应用代码）
+
+      效果对比：
+        无依赖版（自包含单文件）体积：114 MB → 50.6 MB（降幅 56%）
+
+      验证情况：
+        - 压缩版已实测运行正常（窗口/功能完整）
+        - 有依赖版同样受益（托管 DLL 也被压缩）
+
+      注意事项：
+        - Native AOT 方案不可行！WinForms 官方禁止剪裁/AOT
+          （编译报硬错误 NETSDK1175: 启用剪裁时，不支持或不推荐使用 Windows 窗体）
+        - 单文件版启动时会自解压到 %TEMP%，杀毒软件可能误报，
+          需引导用户加入白名单（详见《打不开排查指南.txt》）
+
+      若未来尝试其他体积优化，请保留本配置作为回退基线。
+      ═════════════════════════════════════════════════════════════════════
+    -->
+    <!--
+      仅自包含发布时启用压缩。
+      有依赖版发布使用 no-self-contained 参数会将 SelfContained 置为 false,
+      此处条件自动关闭压缩, 避免 NETSDK1176 (压缩仅在自包含单文件中支持)
+    -->
+    <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
+
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Version>2.0.3</Version>
+    <AssemblyVersion>2.0.3.0</AssemblyVersion>
+    <FileVersion>2.0.3.0</FileVersion>
+    <InformationalVersion>2.03</InformationalVersion>
+    <ApplicationIcon>图标EXE.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="图标EXE.ico" LogicalName="app.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AntdUI" Version="2.4.3" />
+  </ItemGroup>
+</Project>
