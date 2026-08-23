@@ -145,7 +145,7 @@ public class GiteeAdapter : IMirrorPlatform
             var files = doc.RootElement.EnumerateArray()
                 .Select(f => (Name: f.TryGetProperty("name", out var n) ? n.GetString() : "",
                               Sha: f.TryGetProperty("sha", out var s) ? s.GetString() : ""))
-                .Where(f => f.Name.StartsWith("ServerS4A12-") && f.Name.EndsWith(".zip"))
+                .Where(f => f.Name.StartsWith("ServerS4A21-") && f.Name.EndsWith(".zip"))
                 .OrderByDescending(f => f.Name)
                 .ToList();
 

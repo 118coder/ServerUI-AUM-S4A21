@@ -244,7 +244,7 @@ public partial class MainForm : AntdUI.Window
     /*
      * 获取服务端 Data 目录路径
      */
-    string DataDir() => Path.Combine(_ad, "ServerS4A12-AUM",
+    string DataDir() => Path.Combine(_ad, "ServerS4A21-AUM",
         "dist", "win-x64", "Data");
 
     /*

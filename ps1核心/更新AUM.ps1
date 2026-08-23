@@ -27,12 +27,12 @@ Write-Host "  本地版本: v$localVer"
 
 try {
     $ts = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-    $resp = Invoke-WebRequest -Uri "https://raw.githubusercontent.com/118coder/ServerUI-AUM-S4A12/main/AUM-version.txt?t=$ts" -UseBasicParsing -TimeoutSec 10 -Headers @{ "User-Agent" = "ServerUI-AUM"; "Cache-Control" = "no-cache" }
+    $resp = Invoke-WebRequest -Uri "https://raw.githubusercontent.com/118coder/ServerUI-AUM-S4A21/main/AUM-version.txt?t=$ts" -UseBasicParsing -TimeoutSec 10 -Headers @{ "User-Agent" = "ServerUI-AUM"; "Cache-Control" = "no-cache" }
     $remoteVer = $resp.Content.Trim() -replace '\s+', ''
     Write-Host "  远程版本: v$remoteVer (Raw)"
 } catch {
     try {
-        $apiUrl = "https://api.github.com/repos/118coder/ServerUI-AUM-S4A12/contents/AUM-version.txt?ref=main&t=$ts"
+        $apiUrl = "https://api.github.com/repos/118coder/ServerUI-AUM-S4A21/contents/AUM-version.txt?ref=main&t=$ts"
         $resp = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 10 -Headers @{ "User-Agent" = "ServerUI-AUM" }
         $json = $resp.Content | ConvertFrom-Json
         if ($json.content) {
@@ -86,7 +86,7 @@ if (Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }
 New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 $tmpZip = Join-Path $tmpDir "source.zip"
 
-$zipUrl = "https://github.com/118coder/ServerUI-AUM-S4A12/archive/refs/heads/main.zip"
+$zipUrl = "https://github.com/118coder/ServerUI-AUM-S4A21/archive/refs/heads/main.zip"
 $ok = $false
 for ($a = 1; $a -le 3; $a++) {
     try {

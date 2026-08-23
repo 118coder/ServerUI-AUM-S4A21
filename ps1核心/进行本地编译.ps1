@@ -1,29 +1,29 @@
 ﻿# ==================================================================
-#  本地编译 ServerS4A12 — 兜底策略
+#  本地编译 ServerS4A21 — 兜底策略
 #  当 ServerUI.exe 不可用时, 双击 进行本地编译.bat 调用此脚本
 # ==================================================================
 $ErrorActionPreference = "Continue"
 $ScriptRoot = Split-Path -Parent (Get-Command $PSCommandPath | Select-Object -ExpandProperty Source)
 if ((Get-Item $ScriptRoot).Name -eq 'ps1核心') { $ScriptRoot = (Get-Item $ScriptRoot).Parent.FullName }
 $LatestDir = Join-Path $ScriptRoot "latest"
-$SvrZip = Join-Path $LatestDir "ServerS4A12-latest.zip"
-$GmZip = Join-Path $LatestDir "DfoGmTool-latest.zip"
+$SvrZip = Join-Path $LatestDir "ServerS4A21-latest.zip"
+$GmZip = Join-Path $LatestDir "ServerS4A21-GMTool-latest.zip"
 
 Write-Host ""
 Write-Host "========================================"
-Write-Host "  ServerS4A12 本地编译 (兜底策略)"
+Write-Host "  ServerS4A21 本地编译 (兜底策略)"
 Write-Host "========================================"
 Write-Host ""
 
 Write-Host "[1/5] 检查本地缓存..."
 if (-not (Test-Path $SvrZip)) { Write-Host "ERROR: 缺少 $SvrZip"; Read-Host "按任意键退出"; exit 1 }
 $SvrSize = [math]::Round((Get-Item $SvrZip).Length / 1KB)
-Write-Host "  ServerS4A12-latest.zip = $SvrSize KB"
+Write-Host "  ServerS4A21-latest.zip = $SvrSize KB"
 if (Test-Path $GmZip) { 
     $GmSize = [math]::Round((Get-Item $GmZip).Length / 1KB)
-    Write-Host "  DfoGmTool-latest.zip    = $GmSize KB" 
+    Write-Host "  ServerS4A21-GMTool-latest.zip    = $GmSize KB" 
 } else { 
-    Write-Host "  DfoGmTool-latest.zip: 缺失 (跳过GM编译)" 
+    Write-Host "  ServerS4A21-GMTool-latest.zip: 缺失 (跳过GM编译)" 
 }
 
 Write-Host ""
@@ -38,7 +38,7 @@ Write-Host "  SDK: v$($ver.Trim())"
 
 Write-Host ""
 Write-Host "[3/5] 解压与同步..."
-$TempDir = Join-Path $env:TEMP "ServerS4A12-localbuild"
+$TempDir = Join-Path $env:TEMP "ServerS4A21-localbuild"
 if (Test-Path $TempDir) { Remove-Item -Recurse -Force $TempDir }
 New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
 $SvrExtract = Join-Path $TempDir "server-extract"
@@ -54,7 +54,7 @@ $svrSub = Get-ChildItem $SvrExtract -Directory | Select-Object -First 1
 if (-not $svrSub) { Write-Host "ERROR: 服务端ZIP结构异常"; Read-Host "按任意键退出"; exit 1 }
 $svrSrc = $svrSub.FullName
 
-$SrcRoot = Join-Path $ScriptRoot "ServerS4A12-AUM"
+$SrcRoot = Join-Path $ScriptRoot "ServerS4A21-AUM"
 
 Write-Host "  同步服务端文件..."
 $ch = 0

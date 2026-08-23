@@ -1,5 +1,5 @@
 ﻿# ==================================================================
-#  ServerS4A12 一键更新脚本 (v1.917)
+#  ServerS4A21 一键更新脚本 (v1.917)
 # ==================================================================
 #
 # 【这个脚本是干什么的？】
@@ -52,17 +52,17 @@ $ErrorActionPreference = "Continue"
 $ScriptRoot = $PSScriptRoot
 if ((Get-Item $ScriptRoot).Name -eq 'ps1核心') { $ScriptRoot = (Get-Item $ScriptRoot).Parent.FullName }
 
-# SrcRoot = 服务端源码主目录（脚本目录下的 ServerS4A12-AUM 文件夹）
+# SrcRoot = 服务端源码主目录（脚本目录下的 ServerS4A21-AUM 文件夹）
 # 这是更新操作的目标目录，所有文件都会同步到这里
-$SrcRoot = Join-Path $ScriptRoot "ServerS4A12-AUM"
+$SrcRoot = Join-Path $ScriptRoot "ServerS4A21-AUM"
 
 # ==================================================================
 #  仓库连接配置（重要！假如仓库地址或令牌变了，改这里）
 # ==================================================================
 # gitgud.io 是基于 GitLab 的代码托管平台
 # GitLab API 版本是 v4，与之前的 Codeberg API (v1, 基于 Gitea) 不同
-# 项目路径 rewo/86JP 需要 URL 编码为 rewo%2F86JP（%2F 是斜杠 / 的编码）
-$RepoApi = "https://gitgud.io/api/v4/projects/rewio%2F86JP"
+# 项目路径 rewo/ServerS4A21 需要 URL 编码为 rewo%2FServerS4A21（%2F 是斜杠 / 的编码）
+$RepoApi = "https://gitgud.io/api/v4/projects/rewio%2FServerS4A21"
 
 # UTF-8 编码器，用于正确处理中文字符
 $utf8 = [System.Text.Encoding]::UTF8
@@ -86,8 +86,8 @@ $ApiHeaders = @{ "PRIVATE-TOKEN" = $ApiToken }
 # ---- 本地兜底缓存目录 ----
 # 如果所有在线下载均失败，从本地 latest 目录读取压缩包
 $LatestDir = Join-Path $ScriptRoot "latest"
-$LatestSvr = Join-Path $LatestDir "ServerS4A12-latest.zip"
-$LatestGM  = Join-Path $LatestDir "DfoGmTool-latest.zip"
+$LatestSvr = Join-Path $LatestDir "ServerS4A21-latest.zip"
+$LatestGM  = Join-Path $LatestDir "ServerS4A21-GMTool-latest.zip"
 
 # ==================================================================
 #  镜像下载源配置（v1.911：GitGud 不可达时自动切换的备选方案）
@@ -110,15 +110,15 @@ $GiteeToken = $utf8.GetString([Convert]::FromBase64String($utf8.GetString([Conve
 # 服务端 latest.zip 直链（Gitee 优先 → GitHub → Codeberg）
 # Gitee 为私有仓库，需在 URL 后附加 access_token 进行认证下载
 $MirrorServerUrls = @(
-    "$MirrorGiteeRaw/mirrors/ServerS4A12-latest.zip?access_token=$GiteeToken",
-    "$MirrorGitHubRaw/mirrors/ServerS4A12-latest.zip",
-    "$MirrorCodebergRaw/mirrors/ServerS4A12-latest.zip"
+    "$MirrorGiteeRaw/mirrors/ServerS4A21-latest.zip?access_token=$GiteeToken",
+    "$MirrorGitHubRaw/mirrors/ServerS4A21-latest.zip",
+    "$MirrorCodebergRaw/mirrors/ServerS4A21-latest.zip"
 )
-# GM 工具 mirror 下载（Gitee 优先 → GitHub → Codeberg）
+# GM 工具 mirror 下载（Gitee 优先 → GitHub → Codeberg 镜像仓库）
 $MirrorGMUrls = @(
-    "$MirrorGiteeRaw/mirrors/DfoGmTool-latest.zip?access_token=$GiteeToken",
-    "https://raw.githubusercontent.com/118coder/ServerUI-AUM-S4A12/main/dfogmtool.zip",
-    "$MirrorCodebergRaw/mirrors/DfoGmTool-latest.zip"
+    "$MirrorGiteeRaw/mirrors/ServerS4A21-GMTool-latest.zip?access_token=$GiteeToken",
+    "$MirrorGitHubRaw/mirrors/ServerS4A21-GMTool-latest.zip",
+    "$MirrorCodebergRaw/mirrors/ServerS4A21-GMTool-latest.zip"
 )
 # latest.json 元数据下载（Gitee 优先 → GitHub → Codeberg）
 $MirrorMetaUrls = @(
@@ -151,13 +151,13 @@ $b64 = @{
     s_full  = "5YWo6YeP5ZCM5q2l"                     # 全量同步
     s_fullsync = "5YWo6YeP5ZCM5q2lICjmiYDmnInmlofku7YpLi4u"  # 全量同步 (所有文件)...
     s_fallback = "5pyA6L+R5peg5Y+Y5pu0IC0g5Zue6YCA5Yiw5YWo6YeP5ZCM5q2l44CC"  # 最近无变更 - 回退到全量同步。
-    s_server = "U2VydmVyUzRBMTIgLSA="               # ServerS4A12 -
+    s_server = "U2VydmVyUzRBMjEgLQ=="               # ServerS4A21 -
     s_updating = "Pj4+IFszLzVdIOato+WcqOabtOaWsOaWh+S7tiAo"      # >>> [3/5] 正在更新文件 (
     s_done  = "Pj4+IOWujOaIkCEg"                     # >>> 完成!
     s_warn1 = "5byA5aeL5pu05paw5YmN77yM6K+356Gu6K6k572R57uc54iL6YCa77yM5Lim5qOA5p+l5piv5ZCm5bey5byA5ZCv56eR5a2m5LiK572R44CC"    # 开始更新前，请确保网络畅通，并检查是否已开启科学上网。
     s_warn2 = "5pys5Zyw5paH5Lu26Lev5b6E5Y+C6ICD77ya"            # 本地文件路径参考：
-    s_warn3 = "ICAtIOaVsOaNruW6k+WtmOahozogXFNlcnZlclM0QTEyLUFVTVxkaXN0XHdpbi14NjRcRGF0YVxpbnZlbnRvcnkuZGI="  #   - 数据库存储: \ServerS4A12-AUM\dist\win-x64\Data\inventory.db
-    s_warn4 = "ICAtIFBWRuaWh+S7tjogICBcU2VydmVyUzRBMTItQVVNXGRpc3Rcd2luLXg2NFxEYXRhXFB2ZlxTY3JpcHQucHZm"    #   - PVF文件:    \ServerS4A12-AUM\dist\win-x64\Data\Pvf\Script.pvf
+    s_warn3 = "ICAtIOaVsOaNruW6k+WtmOahozogXFNlcnZlclM0QTIxLUFVTVxkaXN0XHdpbi14NjRcRGF0YVxpbnZlbnRvcnkuZGI="  #   - 数据库存储: \ServerS4A21-AUM\dist\win-x64\Data\inventory.db
+    s_warn4 = "ICAtIFBWRuaWh+S7tjogIFxTZXJ2ZXJTNEEyMS1BVU1cZGlzdFx3aW4teDY0XERhdGFcUHZmXFNjcmlwdC5wdmY="    #   - PVF文件:    \ServerS4A21-AUM\dist\win-x64\Data\Pvf\Script.pvf
     s_warn5 = "6K+356Gu6K6k5LiK6L+w5paH5Lu25L2N572u5peg6K+v44CC"            # 请确认以上文件位置无误。
     s_skip   = "ICBb5L+d5oqkXSA="                                   #   [保护]
     s_prot   = "ICAo5bey5L+d5oqk77yM5LiN5Lya6KKr6KaG55GWKQ=="          #   (已保护，不会被覆盖)
@@ -180,7 +180,7 @@ $DbFile = Join-Path $SrcRoot "Server\DfoServer\Data\inventory.db"
 
 # 临时工作目录 —— 下载的 ZIP 包和解压内容都放在这里
 # 使用系统 TEMP 目录，更新完成后会自动清理
-$TempDir = Join-Path $env:TEMP "ServerS4A12-update"
+$TempDir = Join-Path $env:TEMP "ServerS4A21-update"
 
 # 便携版 .NET SDK 的路径 —— 如果系统没有装 SDK，脚本会使用这里的
 $LocalSdk = Join-Path $ScriptRoot "dotnet-sdk"
@@ -238,7 +238,7 @@ function Download-FromGitee($url, $target, $timeout = 30) {
 # 通过 GitHub API 获取 download_url（含临时 token）再下载
 function Download-FromGitHub($repoPath, $target, $timeout = 30) {
     try {
-        $tokenB64 = "WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0="
+        $tokenB64 = "WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0="
         $ghToken = $utf8.GetString([Convert]::FromBase64String($utf8.GetString([Convert]::FromBase64String($tokenB64))))
         $apiUrl = "https://api.github.com/repos/118coder/ServerS4A12.86JP/contents/$repoPath" + "?ref=main"
         $headers = @{"Authorization" = "token $ghToken"; "Accept" = "application/vnd.github.v3+json"}
@@ -347,7 +347,7 @@ function Get-MirrorMeta($type) {
             $meta = $resp.Content | ConvertFrom-Json
         }
         elseif ($type -eq "github") {
-            $tokenB64 = "WjJod1gxQlpaVEZNYzBjMlpWZElhMkZNUTNWa1RVbHNkVTFEVmxKb1pqVlllREZwTUVoa01BPT0="
+            $tokenB64 = "WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0="
             $tok = $utf8.GetString([Convert]::FromBase64String($utf8.GetString([Convert]::FromBase64String($tokenB64))))
             $resp = Invoke-WebRequest -Uri "https://api.github.com/repos/118coder/ServerS4A12.86JP/contents/latest.json?ref=main" -Headers @{"Authorization"="token $tok"; "Accept"="application/vnd.github.v3+json"} -UseBasicParsing -TimeoutSec 15
             $j = $resp.Content | ConvertFrom-Json
@@ -411,7 +411,7 @@ function Test-SourceAvailability {
         $reqTimeout = [math]::Min(3, $remaining)
         try {
             Write-Host "[连接检测]   GitGud 第${attempt}次 (${hits}/3)..."
-            Invoke-WebRequest -Uri "https://gitgud.io/rewio/86JP" -TimeoutSec $reqTimeout -UseBasicParsing -ErrorAction Stop | Out-Null
+            Invoke-WebRequest -Uri "https://gitgud.io/rewio/ServerS4A21" -TimeoutSec $reqTimeout -UseBasicParsing -ErrorAction Stop | Out-Null
             $hits++
         } catch {
             if ($_.Exception.Response -ne $null) { $hits++ }
@@ -560,9 +560,9 @@ function Sync-CommitHistory {
     # 构造 API URL 模板
     # GitLab API v4 的 commit 查询格式：
     #   /projects/:id/repository/commits?ref_name=分支&per_page=每页条数&since=起始时间&page=页码
-    # ref_name=main ：从 main 分支拉
+    # ref_name=master ：从 master 分支拉（ServerS4A21 默认分支为 master）
     # per_page=50  ：每页最多 50 条（GitLab 最大允许 100）
-    $uriBase = "$RepoApi/repository/commits?ref_name=main&per_page=50$sinceStr&page="
+    $uriBase = "$RepoApi/repository/commits?ref_name=master&per_page=50$sinceStr&page="
 
     # ================================================================
     #  阶段 1：先拉第 1 页，确认是否有数据、是否需要多页
@@ -762,7 +762,7 @@ function Test-ZipFile($path) {
 #   第 3 级 —— 内容确实不同 → 复制并验证 SHA-256（每次写入后都校验一次）
 #
 # 参数 $from: 源目录（解压出的临时目录）
-# 参数 $to:   目标目录（ServerS4A12-AUM）
+# 参数 $to:   目标目录（ServerS4A21-AUM）
 # 返回: 变更的文件数量
 function Sync-SourceFiles($from, $to) {
     $changes = 0       # 变更计数
@@ -1067,14 +1067,14 @@ try {
     $ProgressPreference = "SilentlyContinue"
 
     # ---- 准备 GM 工具临时目录 ----
-    $gmTempDir = Join-Path $env:TEMP "ServerS4A12-gmupdate"
+    $gmTempDir = Join-Path $env:TEMP "ServerS4A21-gmupdate"
     if (Test-Path $gmTempDir) { Remove-Item -Recurse -Force $gmTempDir }
     New-Item -ItemType Directory -Path $gmTempDir -Force | Out-Null
     $gmTempZip = Join-Path $gmTempDir "main.zip"
     $gmTempExtract = Join-Path $gmTempDir "extract"
 
     # GM 工具的仓库地址（已迁移到 GitGud，需要认证下载）
-    $gmRepoApi = "https://gitgud.io/api/v4/projects/rewio%2F86JPGMTool"
+    $gmRepoApi = "https://gitgud.io/api/v4/projects/rewio%2FS4A21GmTool"
 
     # ================================================================
     #  连接预检：快速测试下载源可达性 (v1.914)
@@ -1108,7 +1108,7 @@ try {
     
     if ($sourceAvailability.GitGud) {
         Write-Host "[连接检测] GitGud 可达 → 使用主源下载。"
-        $svrPrimaryUrl = "https://gitgud.io/api/v4/projects/rewio%2F86JP/repository/archive.zip?sha=main"
+        $svrPrimaryUrl = "https://gitgud.io/api/v4/projects/rewio%2FServerS4A21/repository/archive.zip?sha=master"
         $svrUseAuth = $true
         $svrTimeout = 30
         $svrRetries = 5
@@ -1155,7 +1155,7 @@ try {
             @{Name="Codeberg"; Type="codeberg"; Url=$MirrorServerUrls[2]}
         )
         # v1.921: 版本择优 — 预取各镜像 latest.json 元数据, 按版本标识字符串
-        # 从新到旧排序 (包名形如 ServerS4A12-20260731-0845-1234, 固定宽度格式
+        # 从新到旧排序 (包名形如 ServerS4A21-20260731-0845-1234, 固定宽度格式
         # 下字典序 = 时间序, 元数据缺失的源排最后);
         # 元数据同时用于"自洽 sha256"校验 (只与本镜像自己的包比对)
         $svrMeta = @{}
@@ -1180,7 +1180,7 @@ try {
                 Write-Host "Server download: 尝试 $($m.Name)..."
                 Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
                 if ($m.Type -eq "gitee") { $svrOk = Download-FromGitee $m.Url $TempZip 20 }
-                elseif ($m.Type -eq "github") { $svrOk = Download-FromGitHub "mirrors/ServerS4A12-latest.zip" $TempZip 20 }
+                elseif ($m.Type -eq "github") { $svrOk = Download-FromGitHub "mirrors/ServerS4A21-latest.zip" $TempZip 20 }
                 else { Invoke-WebRequest -Uri $m.Url -OutFile $TempZip -UseBasicParsing -TimeoutSec 20 }
                 if (-not $svrOk) { continue }
                 # v1.921: 完整性校验链 — 魔数(结构) → CRC(内容) → 自洽 sha256
@@ -1343,7 +1343,7 @@ try {
     })
     $gmHandle = $null
     if ($sourceAvailability.GitGud) {
-        [void]$gmPS.AddArgument("$gmRepoApi/repository/archive.zip?sha=main")
+        [void]$gmPS.AddArgument("$gmRepoApi/repository/archive.zip?sha=master")
         [void]$gmPS.AddArgument($gmTempZip)
         [void]$gmPS.AddArgument($ApiToken)
         [void]$gmPS.AddArgument(60)
@@ -1367,7 +1367,7 @@ try {
                     Write-Host "GM download: 尝试 $($m.Name)..."
                     Remove-Item $gmTempZip -Force -ErrorAction SilentlyContinue
                     if ($m.Name -eq "Gitee") { $gmOk = Download-FromGitee $m.Url $gmTempZip 20 }
-                    elseif ($m.Name -eq "GitHub") { $gmOk = Download-FromGitHub "mirrors/DfoGmTool-latest.zip" $gmTempZip 20 }
+                    elseif ($m.Name -eq "GitHub") { $gmOk = Download-FromGitHub "mirrors/ServerS4A21-GMTool-latest.zip" $gmTempZip 20 }
                     else { Invoke-WebRequest -Uri $m.Url -OutFile $gmTempZip -UseBasicParsing -TimeoutSec 20 }
                     $testZip = [System.IO.Compression.ZipFile]::OpenRead($gmTempZip)
                     if ($testZip.Entries.Count -gt 0) { $gmOk = $true; $testZip.Dispose(); break }
@@ -1447,7 +1447,7 @@ try {
                 Write-Host "  尝试 $($gmFallbackNames[$i]): $($gmFallbackUrls[$i])"
                 Remove-Item $gmTempZip -Force -ErrorAction SilentlyContinue
                     if ($gmFallbackNames[$i] -eq "Gitee") { $gmOk = Download-FromGitee $gmFallbackUrls[$i] $gmTempZip 30 }
-                    elseif ($gmFallbackNames[$i] -eq "GitHub") { $gmOk = Download-FromGitHub "mirrors/DfoGmTool-latest.zip" $gmTempZip 30 }
+                    elseif ($gmFallbackNames[$i] -eq "GitHub") { $gmOk = Download-FromGitHub "mirrors/ServerS4A21-GMTool-latest.zip" $gmTempZip 30 }
                     else { Invoke-WebRequest -Uri $gmFallbackUrls[$i] -OutFile $gmTempZip -UseBasicParsing -TimeoutSec 30 }
                 $testZip = [System.IO.Compression.ZipFile]::OpenRead($gmTempZip)
                 if ($testZip.Entries.Count -gt 0) { $gmOk = $true; $testZip.Dispose(); break }
@@ -1494,7 +1494,7 @@ try {
                     Write-Host "  尝试 $($fallbackNames[$i]): $($fallbackUrls[$i])"
                     Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
                     if ($fallbackNames[$i] -eq "Gitee") { $svrOk = Download-FromGitee $fallbackUrls[$i] $TempZip 30 }
-                    elseif ($fallbackNames[$i] -eq "GitHub") { $svrOk = Download-FromGitHub "mirrors/ServerS4A12-latest.zip" $TempZip 30 }
+                    elseif ($fallbackNames[$i] -eq "GitHub") { $svrOk = Download-FromGitHub "mirrors/ServerS4A21-latest.zip" $TempZip 30 }
                     else { Invoke-WebRequest -Uri $fallbackUrls[$i] -OutFile $TempZip -UseBasicParsing -TimeoutSec 30 }
                     $testZip = [System.IO.Compression.ZipFile]::OpenRead($TempZip)
                     if ($testZip.Entries.Count -gt 0) {
@@ -1549,7 +1549,7 @@ try {
         exit 1
     }
     # ZIP 解压后通常会在 extract 目录下生成一个子目录
-    # 比如 extract/ServerS4A12-main/，我们需要找到它
+    # 比如 extract/ServerS4A21-main/，我们需要找到它
     $srcDir = Get-ChildItem -Path $TempExtract -Directory | Select-Object -First 1
     if (-not $srcDir) {
         Write-Host "ERROR: Server extraction failed."
@@ -2097,7 +2097,7 @@ try {
                     # 每页最多重试 10 次
                     for ($a = 1; $a -le 10; $a++) {
                         try {
-                            $resp = Invoke-WebRequest -Uri "$RepoApi/repository/commits?ref_name=main&per_page=$perPage&page=$page&since=$fbSince" -Headers $ApiHeaders -UseBasicParsing -TimeoutSec 15
+                            $resp = Invoke-WebRequest -Uri "$RepoApi/repository/commits?ref_name=master&per_page=$perPage&page=$page&since=$fbSince" -Headers $ApiHeaders -UseBasicParsing -TimeoutSec 15
                             break
                         } catch {
                             if ($a -lt 10) { Start-Sleep 1 }
@@ -2241,7 +2241,7 @@ try {
     if (($sortedDatesAsc | Where-Object { $_ -lt $sda })) {
         Write-Host "---"
         Write-Host ((T "s_more") + (T "fn_log"))
-        Write-Host ((T "s_repo") + "https://gitgud.io/rewio/86JP/-/commits/main")
+        Write-Host ((T "s_repo") + "https://gitgud.io/rewio/ServerS4A21/-/commits/master")
     }
     }  # end if (-not $mirrorLogUsed)
 }
@@ -2257,14 +2257,14 @@ try {
 #
 #   Q: 编译失败（ERROR: publish failed）
 #   A: 1. 检查是否安装了 .NET 10 SDK（cmd 运行 dotnet --version）
-#      2. 确保 ServerS4A12-AUM\Server\DfoServer\DfoServer.csproj 存在
+#      2. 确保 ServerS4A21-AUM\Server\DfoServer\DfoServer.csproj 存在
 #
 #   Q: 日志拉取很慢/失败
 #   A: 1. 可以勾选 GUI 中的"跳过更新日志"来跳过这一步
 #      2. 不影响实际的代码更新功能
 #
 #   Q: 玩家数据丢失了
-#   A: 检查 ServerS4A12-AUM\Server\DfoServer\Data\inventory.db
+#   A: 检查 ServerS4A21-AUM\Server\DfoServer\Data\inventory.db
 #      看看有没有 inventory.db.bak 备份文件
 #      如果有，可以手动改名恢复
 # ==================================================================

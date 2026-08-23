@@ -74,7 +74,7 @@ public partial class ClassicForm : AntdUI.Window
         Size = new Size(1280, 840);
         StartPosition = FormStartPosition.CenterScreen;
         ControlBox = false;
-        Text = "ServerS4A12 管理器 v" + MainForm.VER;   // 经典模式
+        Text = "ServerS4A21 管理器 v" + MainForm.VER;   // 经典模式
         Font = new Font("Microsoft YaHei UI", 10f);
 
         // 拖放支持 — 拖 .db 文件到窗口任意位置换挡
@@ -204,7 +204,7 @@ public partial class ClassicForm : AntdUI.Window
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
         var title = new AntdUI.Label
         {
-            Text = "经典模式 · ServerS4A12 管理器 v" + MainForm.VER,
+            Text = "经典模式 · ServerS4A21 管理器 v" + MainForm.VER,
             Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -370,7 +370,7 @@ public partial class ClassicForm : AntdUI.Window
             Lg(">>> 点击了重启服务端", Color.CornflowerBlue);
             await System.Threading.Tasks.Task.Run(() => _main._sv.Stop());
             await System.Threading.Tasks.Task.Delay(1200);
-            _main._sv.Start(Path.Combine(_main._ad, "ServerS4A12-AUM"));
+            _main._sv.Start(Path.Combine(_main._ad, "ServerS4A21-AUM"));
             _ = System.Threading.Tasks.Task.Run(async () =>
             {
                 await System.Threading.Tasks.Task.Delay(10000);
@@ -399,7 +399,7 @@ public partial class ClassicForm : AntdUI.Window
         btGm = B("GM工具", TTypeMini.Warn, "ToolOutlined", 11, true);
         btGm.Click += (s, e) => _main.LaunchGmTool();
         btPv = B("打开PVF目录", TTypeMini.Error, "FolderOpenOutlined", 10, true);
-        btPv.Click += (s, e) => OpenDir(Path.Combine(_main._ad, "ServerS4A12-AUM", "dist", "win-x64", "Data", "Pvf"), "PVF目录");
+        btPv.Click += (s, e) => OpenDir(Path.Combine(_main._ad, "ServerS4A21-AUM", "dist", "win-x64", "Data", "Pvf"), "PVF目录");
         toolG.Controls.Add(btGm, 0, 0);
         toolG.Controls.Add(btPv, 1, 0);
         toolCard.Controls.Add(toolG);
@@ -562,7 +562,7 @@ public partial class ClassicForm : AntdUI.Window
         btOB = B("打开备份库", TTypeMini.Default, "FolderOpenOutlined", 9.5f, false);
         btOB.Click += (s, e) => OpenDir(Path.Combine(_main._ad, "存档管理", "备份存档"), "备份存档目录");
         btMD = B("打开主存档", TTypeMini.Default, "DatabaseOutlined", 9.5f, false);
-        btMD.Click += (s, e) => OpenDir(Path.Combine(_main._ad, "ServerS4A12-AUM", "dist", "win-x64", "Data"), "主存档目录");
+        btMD.Click += (s, e) => OpenDir(Path.Combine(_main._ad, "ServerS4A21-AUM", "dist", "win-x64", "Data"), "主存档目录");
         dirRow.Controls.Add(btOD, 0, 0);
         dirRow.Controls.Add(btOB, 1, 0);
         dirRow.Controls.Add(btMD, 2, 0);
@@ -843,12 +843,12 @@ public partial class ClassicForm : AntdUI.Window
     {
         try
         {
-            var distDir = Path.Combine(_main._ad, "ServerS4A12-AUM", "dist", "win-x64");
+            var distDir = Path.Combine(_main._ad, "ServerS4A21-AUM", "dist", "win-x64");
             bool running = _main._sv.IsBatRunning && ServerService.IsDfoServerRunning(distDir);
             lbStatus.Text = running ? "● 服务端运行中" : "● 服务端未运行";
             lbStatus.ForeColor = running ? Gn : Rd;
 
-            var pvfOk = _main._sv.PvfExists(Path.Combine(_main._ad, "ServerS4A12-AUM"));
+            var pvfOk = _main._sv.PvfExists(Path.Combine(_main._ad, "ServerS4A21-AUM"));
             lbPvf.Text = pvfOk ? "PVF: ● 已加载" : "PVF: ● 未找到";
             lbPvf.ForeColor = pvfOk ? Gn : Rd;
 

@@ -35,9 +35,9 @@ namespace ServerUI.Services;
 
 public class SelfUpdateService
 {
-    const string GitHubRaw = "https://raw.githubusercontent.com/118coder/ServerUI-AUM-S4A12/main/";
-    const string GitHubApi = "https://api.github.com/repos/118coder/ServerUI-AUM-S4A12/contents/";
-    const string RepoZipUrl = "https://github.com/118coder/ServerUI-AUM-S4A12/archive/refs/heads/main.zip";
+    const string GitHubRaw = "https://raw.githubusercontent.com/118coder/ServerUI-AUM-S4A21/main/";
+    const string GitHubApi = "https://api.github.com/repos/118coder/ServerUI-AUM-S4A21/contents/";
+    const string RepoZipUrl = "https://github.com/118coder/ServerUI-AUM-S4A21/archive/refs/heads/main.zip";
     const string VerFile = "AUM-version.txt";
 
     public string RemoteVersion { get; private set; }
@@ -168,12 +168,12 @@ public class SelfUpdateService
         // 旧逻辑 GetDirectoryName(localDir) 在用户机器无 AUM管理组件\ServerUI
         // 子目录时 (绝大多数正常部署) 会误指向 AUM管理组件 的父目录,
         // 导致 ps1核心/实用工具包 等同步到了错误位置 (用户目录里"没更新")
-        // 正确判定: AUM管理组件 根 = 含 ServerS4A12-AUM 子目录的目录
+        // 正确判定: AUM管理组件 根 = 含 ServerS4A21-AUM 子目录的目录
         var aumRoot = localDir;
-        if (!Directory.Exists(Path.Combine(aumRoot, "ServerS4A12-AUM")))
+        if (!Directory.Exists(Path.Combine(aumRoot, "ServerS4A21-AUM")))
         {
             var parent = Path.GetDirectoryName(localDir);
-            if (parent != null && Directory.Exists(Path.Combine(parent, "ServerS4A12-AUM")))
+            if (parent != null && Directory.Exists(Path.Combine(parent, "ServerS4A21-AUM")))
                 aumRoot = parent;
         }
 
@@ -250,10 +250,10 @@ public class SelfUpdateService
             if (Directory.Exists(tmpExtract)) Directory.Delete(tmpExtract, true);
             ZipFile.ExtractToDirectory(tmpZip, tmpExtract);
 
-            // GitHub zipball 解压后有个子目录 (如 118coder-ServerUI-AUM-S4A12-xxxxx)
+            // GitHub zipball 解压后有个子目录 (如 118coder-ServerUI-AUM-S4A21-xxxxx)
             var rootDir = tmpExtract;
             var subDir = Directory.GetDirectories(tmpExtract).FirstOrDefault(
-                d => d.Contains("ServerUI") || d.Contains("S4A12")) ?? tmpExtract;
+                d => d.Contains("ServerUI") || d.Contains("S4A21")) ?? tmpExtract;
             rootDir = subDir;
 
             // 找 ServerUI 源码目录
@@ -940,7 +940,7 @@ public class SelfUpdateService
 
     /// <summary>
     /// 整体覆盖同步仓库包 → AUM管理组件 (v2.031)
-    /// 仓库 zip 即完整仓库: 根目录文件 + 除 ServerS4A12-AUM(服务端) 外的
+    /// 仓库 zip 即完整仓库: 根目录文件 + 除 ServerS4A21-AUM(服务端) 外的
     /// 所有一级子目录 (实用工具包 / DX11运行 / DX12运行 / dfogmtool / latest / ps1核心 等)
     /// 全部覆盖同步, 用户新增的资源文件夹随更新自动带下来
     /// </summary>
@@ -954,12 +954,12 @@ public class SelfUpdateService
             try { File.Copy(f, Path.Combine(aumDir, name), true); } catch { }
         }
 
-        // 一级子目录 (跳过 ServerUI 源码 / ServerS4A12-AUM 服务端 / 版本控制目录)
+        // 一级子目录 (跳过 ServerUI 源码 / ServerS4A21-AUM 服务端 / 版本控制目录)
         foreach (var dir in Directory.GetDirectories(repoRoot))
         {
             var name = Path.GetFileName(dir);
             if (string.Equals(name, "ServerUI", StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(name, "ServerS4A12-AUM", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(name, "ServerS4A21-AUM", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(name, ".git", StringComparison.OrdinalIgnoreCase)) continue;
             var target = Path.Combine(aumDir, name);
             try

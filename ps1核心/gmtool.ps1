@@ -2,7 +2,7 @@
 #  DfoGmTool - GM工具 独立启动脚本 (v1.83)
 #  写法完全对齐 ServerUI 里 btGm 的启动逻辑:
 #    gmp = AUM管理组件\dfogmtool\publish\DfoGmTool.exe
-#    sb  = AUM管理组件\ServerS4A12-AUM\dist\win-x64
+#    sb  = AUM管理组件\ServerS4A21-AUM\dist\win-x64
 #    启动前先杀掉旧 DfoGmTool 进程
 #    以 sb 作为 --server-bin 参数 + 环境变量 DFO_GM_SERVER_BIN
 #    关键: 工作目录 = publish, ASP.NET 才能定位 wwwroot (否则页面 404)
@@ -16,7 +16,7 @@ $Base      = $PSScriptRoot
 if ((Get-Item $Base).Name -eq 'ps1核心') { $Base = (Get-Item $Base).Parent.FullName }
 $GmDir     = Join-Path $Base 'dfogmtool\publish'
 $GmExe     = Join-Path $GmDir 'DfoGmTool.exe'
-$ServerBin = Join-Path $Base 'ServerS4A12-AUM\dist\win-x64'
+$ServerBin = Join-Path $Base 'ServerS4A21-AUM\dist\win-x64'
 $DbPath    = Join-Path $ServerBin 'Data\inventory.db'
 $PvfPath   = Join-Path $ServerBin 'Data\Pvf\Script.pvf'
 

@@ -181,7 +181,7 @@ public class ServerService
      *   5. 启动进程
      * 
      * 参数:
-     *   baseDir — ServerS4A12-AUM 目录（不是 dist 目录！）
+     *   baseDir — ServerS4A21-AUM 目录（不是 dist 目录！）
      * 
      * 关键设置:
      *   UseShellExecute = false  — 必须为 false 才能持有进程句柄
@@ -379,7 +379,7 @@ public class ServerService
      * 路径计算逻辑:
      *   如果 EXE 所在目录下有 AUM管理组件 子目录 → _ad = AUM管理组件
      *   否则 → _ad = EXE 所在目录（便携版场景）
-     *   然后 → _ad\ServerS4A12-AUM\dist\win-x64
+     *   然后 → _ad\ServerS4A21-AUM\dist\win-x64
      * 
      * 这是判定服务端位置的唯一入口，修改这里会影响所有路径相关的功能
      */
@@ -389,7 +389,7 @@ public class ServerService
         var ad = Directory.Exists(Path.Combine(bd, "AUM管理组件"))
             ? Path.Combine(bd, "AUM管理组件")
             : bd;
-        return Path.Combine(ad, "ServerS4A12-AUM", "dist", "win-x64");
+        return Path.Combine(ad, "ServerS4A21-AUM", "dist", "win-x64");
     }
 
     /*

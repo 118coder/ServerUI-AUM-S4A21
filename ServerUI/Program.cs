@@ -84,7 +84,7 @@ static class Program
                     "当前系统版本过低，ServerUI 需要 Windows 10 (1607) 及以上版本才能运行。\n\n"
                     + "当前系统: " + osVer.VersionString + "\n\n"
                     + "请升级系统或联系管理员。",
-                    "ServerS4A12 管理器 - 系统版本不兼容",
+                    "ServerS4A21 管理器 - 系统版本不兼容",
                     System.Windows.Forms.MessageBoxButtons.OK,
                     System.Windows.Forms.MessageBoxIcon.Warning);
                 return;
@@ -173,7 +173,7 @@ static class Program
                 "  1. 有依赖版需先安装 .NET 10 运行环境（可改用无依赖版）\n" +
                 "  2. 被杀毒软件拦截，请加入信任\n\n" +
                 "错误信息：\n" + ex.GetBaseException().Message,
-                "ServerS4A12 管理器 - 启动失败",
+                "ServerS4A21 管理器 - 启动失败",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         catch { }
