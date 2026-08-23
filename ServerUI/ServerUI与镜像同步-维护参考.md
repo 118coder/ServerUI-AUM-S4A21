@@ -140,6 +140,7 @@ GM：    dotnet publish dfogmtool\DfoGmTool.csproj -c Release -r win-x64 --self-
 7. **修复 bug**：`save-quick.ps1` / `save-switch.ps1` 引用 `停止服务端.bat` 不存在 → 改为实际的 `停止服务.bat`。
 8. **开发者镜像上传.ps1**：保留 S4A12 全流程，新增 S4A21 上传 + 清理（Release/文件/tag 各保留 2）。
 9. **GitHub 令牌已更新**（旧令牌 401 → 新令牌实测 200）。
+10. **实用工具按钮调整（v2.034）**：【修复赛丽亚房间问题】→【待定】，【安装新安全DLL】→【待定2】；S4A21 已无此问题，功能暂时移除（点击仅提示、不执行），按钮与底层方法保留以备未来；更新流程不再自动安装安全 DLL；疑难杂症页相关正文已同步。
 
 ---
 

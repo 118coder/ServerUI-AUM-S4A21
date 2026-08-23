@@ -1022,9 +1022,9 @@ public partial class MainForm : AntdUI.Window
      */
     internal async System.Threading.Tasks.Task RI()
     {
-        // v2.03: 更新前检测残留 PS1 (无残留不弹窗) + 自动安装安全DLL (已安装则跳过)
+        // v2.034: 更新前检测残留 PS1 (无残留不弹窗)
+        // 自动安装安全DLL 已随 S4A21 版本移除（服务端/游戏已无此问题）
         CheckLeftoverPs1Prompt();
-        InstallSecurityDll();
         if (!await CanUpdate()) return;
         _ = TryMirrorUpload();
         if (_sv.IsRunning)
@@ -1069,9 +1069,9 @@ public partial class MainForm : AntdUI.Window
      */
     internal     async System.Threading.Tasks.Task RF()
     {
-        // v2.03: 更新前检测残留 PS1 (无残留不弹窗) + 自动安装安全DLL (已安装则跳过)
+        // v2.034: 更新前检测残留 PS1 (无残留不弹窗)
+        // 自动安装安全DLL 已随 S4A21 版本移除（服务端/游戏已无此问题）
         CheckLeftoverPs1Prompt();
-        InstallSecurityDll();
         if (!await CanUpdate()) return;
         if (_sv.IsRunning)
         {

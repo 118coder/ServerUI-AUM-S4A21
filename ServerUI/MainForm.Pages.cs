@@ -819,22 +819,23 @@ public partial class MainForm : AntdUI.Window
         g3.Controls.Add(btBuild, 0, 1);
         g3.Controls.Add(buildTip, 1, 1);
 
-        // [修复赛丽亚房间问题] — 样式与"进行本地编译"完全一致(尺寸/图标/字体),
-        // 仅文字与颜色不同 (红色 Error)
-        var btFix = B("修复赛丽亚房间问题", TTypeMini.Error, "BuildOutlined");
-        btFix.Click += (s, e) => FixSeriaRoomConfirm();
-        var fixTip = L("如果遇到卡赛丽亚房间问题，请点击该选项，将会替换86JP.dll", 8.5f);
+        // [待定] — 原"修复赛丽亚房间问题"按钮 (红色 Error)
+        // S4A21 版本服务端与游戏本体已无此问题，功能暂时移除；保留按钮以备未来需要
+        var btFix = B("待定", TTypeMini.Error, "BuildOutlined");
+        btFix.Click += (s, e) =>
+            Lg("【待定】原\"修复赛丽亚房间问题\"功能已暂时移除（S4A21 已无此问题），按钮保留", Txt2);
+        var fixTip = L("功能已暂时移除（S4A21 版本已无此问题），按钮保留待定", 8.5f);
         fixTip.TextAlign = ContentAlignment.MiddleLeft;
         fixTip.TextMultiLine = true;
         g3.Controls.Add(btFix, 0, 2);
         g3.Controls.Add(fixTip, 1, 2);
 
-        // [安装新安全DLL] — 样式与"修复赛丽亚房间问题"一致, 颜色为绿色 (Success)
-        // 从 实用工具包\DLL覆盖\ 解压 86JP-DLL安全性补丁.zip 覆盖到游戏根目录;
-        // 已存在"已安装"标记文件时跳过 (更新时自动执行)
-        var btSec = B("安装新安全DLL", TTypeMini.Success, "SafetyCertificateOutlined");
-        btSec.Click += (s, e) => InstallSecurityDll();
-        var secTip = L("安装 86JP 安全 DLL 补丁到游戏根目录，防止私服 DLL 泄露隐私", 8.5f);
+        // [待定2] — 原"安装新安全DLL"按钮 (绿色 Success)
+        // S4A21 版本服务端与游戏本体已无此问题，功能暂时移除；保留按钮以备未来需要
+        var btSec = B("待定2", TTypeMini.Success, "SafetyCertificateOutlined");
+        btSec.Click += (s, e) =>
+            Lg("【待定2】原\"安装新安全DLL\"功能已暂时移除（S4A21 已无此问题），按钮保留", Txt2);
+        var secTip = L("功能已暂时移除（S4A21 版本已无此问题），按钮保留待定2", 8.5f);
         secTip.TextAlign = ContentAlignment.MiddleLeft;
         secTip.TextMultiLine = true;
         g3.Controls.Add(btSec, 0, 3);
