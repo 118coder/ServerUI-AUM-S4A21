@@ -15,8 +15,8 @@
  * 【代码组织 (partial class 拆分, 各文件独立维护)】
  *   MainForm.cs             — 字段声明 / 构造函数 / 控件工厂 / Build()
  *                              / ShowPage() / 窗口拉伸过渡动画
- *   MainForm.Pages.cs       — 五个页面构建: 开始 / 存档管理 / 设置与关于
- *                              / 使用说明 / 日志条 (页面 UI 改动只改这里)
+ *   MainForm.Pages.cs       — 页面构建: 开始 / 存档管理 / DLL扩展 / 调整系统时间
+ *                              / 设置与关于 / 使用说明 / 日志条 (页面 UI 改动只改这里)
  *   MainForm.Archive.cs     — 存档管理全部逻辑 (导入导出/切换/重命名/
  *                              清理冗余DB/拖拽换挡/刷新)
  *   MainForm.Server.cs      — 服务端控制 / 日志 / 系统检测 / DX补丁 /
@@ -61,9 +61,9 @@ public partial class MainForm : AntdUI.Window
 
     // VER = 当前工具版本号 — 显示在窗口标题和启动日志中
 #if NET48
-    internal const string VER = "2.034-V";   // Win7 兼容模式
+    internal const string VER = "2.1-V";   // Win7 兼容模式
 #else
-    internal const string VER = "2.034";
+    internal const string VER = "2.1";
 #endif
 
     // ===== 路径计算 =====
@@ -97,7 +97,7 @@ public partial class MainForm : AntdUI.Window
     AntdUI.Label lbSt, lbPv, lbVe, lbSd;
     AntdUI.Label lbLu;                // 上次更新(概览)
     // 概览页 — 快捷控制
-    AntdUI.Button btPlay, btStop, btRe, btPv, btGm, btMD;
+    AntdUI.Button btPlay, btStop, btRe, btPv, btPvR, btGm, btMD;
     // 概览页 — 快速更新
     AntdUI.Button btIn, btFu, btVL;
     // DX 选项
@@ -686,6 +686,8 @@ public partial class MainForm : AntdUI.Window
         };
         mn.Items.Add(new AntdUI.MenuItem { Text = "开始",      IconSvg = "DashboardOutlined",      Tag = "dash" });
         mn.Items.Add(new AntdUI.MenuItem { Text = "存档管理",  IconSvg = "DatabaseOutlined",       Tag = "archive" });
+        mn.Items.Add(new AntdUI.MenuItem { Text = "DLL扩展",   IconSvg = "ApiOutlined",            Tag = "dll" });
+        mn.Items.Add(new AntdUI.MenuItem { Text = "调整系统时间", IconSvg = "ClockCircleOutlined", Tag = "time" });
         mn.Items.Add(new AntdUI.MenuItem { Text = "设置与关于", IconSvg = "SettingOutlined",        Tag = "about" });
         mn.Items.Add(new AntdUI.MenuItem { Text = "使用说明",   IconSvg = "QuestionCircleOutlined", Tag = "help" });
         mn.Items.Add(new AntdUI.MenuItem { Text = "疑难杂症解惑", IconSvg = "BulbOutlined",         Tag = "tsh" });
@@ -706,8 +708,12 @@ public partial class MainForm : AntdUI.Window
         pgUpd  = new AntdUI.In.Panel { Dock = DockStyle.Fill, AutoScroll = true, Visible = false };
         pgHelp = new AntdUI.In.Panel { Dock = DockStyle.Fill, AutoScroll = true, Visible = false };
         pgTsh  = new AntdUI.In.Panel { Dock = DockStyle.Fill, AutoScroll = true, Visible = false };
+        pgDll  = new AntdUI.In.Panel { Dock = DockStyle.Fill, AutoScroll = true, Visible = false };
+        pgTime = new AntdUI.In.Panel { Dock = DockStyle.Fill, AutoScroll = true, Visible = false };
         contentCard.Controls.Add(pgDash);
         contentCard.Controls.Add(pgArc);
+        contentCard.Controls.Add(pgDll);
+        contentCard.Controls.Add(pgTime);
         contentCard.Controls.Add(pgUpd);
         contentCard.Controls.Add(pgHelp);
         contentCard.Controls.Add(pgTsh);
@@ -718,6 +724,8 @@ public partial class MainForm : AntdUI.Window
         BuildAbout();
         BuildHelp();
         BuildTroubleshoot();
+        BuildDllPage();
+        BuildTimePage();
         BuildLog();
 
         // 运行方式默认不勾选任何 DX 选项 (无选中 = 默认 DX9 运行)
@@ -744,10 +752,14 @@ public partial class MainForm : AntdUI.Window
             pgUpd.Size = cs;
             pgDash.Size = cs;
             pgTsh.Size = cs;
+            pgDll.Size = cs;
+            pgTime.Size = cs;
             pgArc.PerformLayout();
             pgUpd.PerformLayout();
             pgDash.PerformLayout();
             pgTsh.PerformLayout();
+            pgDll.PerformLayout();
+            pgTime.PerformLayout();
         }
         catch { }
     }
@@ -761,6 +773,8 @@ public partial class MainForm : AntdUI.Window
         Control target = tag switch
         {
             "archive" => (Control)pgArc,
+            "dll" => (Control)pgDll,
+            "time" => (Control)pgTime,
             "about" => (Control)pgUpd,
             "help" => (Control)pgHelp,
             "tsh" => (Control)pgTsh,
@@ -768,7 +782,7 @@ public partial class MainForm : AntdUI.Window
         };
 
         SuspendLayout();
-        foreach (var c in new Control[] { pgDash, pgArc, pgUpd, pgHelp, pgTsh })
+        foreach (var c in new Control[] { pgDash, pgArc, pgDll, pgTime, pgUpd, pgHelp, pgTsh })
         {
             bool show = c == target;
             if (c.Visible != show)

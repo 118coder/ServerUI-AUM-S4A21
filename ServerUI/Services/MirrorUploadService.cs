@@ -309,6 +309,69 @@ public class MirrorUploadService
                     var ghDownloadUrl = $"https://raw.githubusercontent.com/{GitHubRepo}/main/mirrors/{pkgName}.zip";
                     var cbDownloadUrl = $"https://codeberg.org/118coder/ServerS4A12.86JP/raw/branch/main/mirrors/{pkgName}.zip";
                     var gtDownloadUrl = $"https://gitee.com/c118oder/ServerS4A12.86JP/raw/main/mirrors/{pkgName}.zip";
+
+                    // v1.922: latest.json 兼容双系列 — 顶层=当前(S4A21)；
+                    // 同时写入 s4a21 / s4a12 两个完整区块(S4A12 哈希由本地 latest 缓存推算，便于旧版 S4A12-AUM 校验)
+                    var latestCacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AUM管理组件", "latest");
+
+                    object s4a12Block = null;
+                    var s4a12ZipPath = Path.Combine(latestCacheDir, "ServerS4A12-latest.zip");
+                    if (File.Exists(s4a12ZipPath))
+                    {
+                        var s4a12Bytes = File.ReadAllBytes(s4a12ZipPath);
+                        var s4a12Sha = Compat.Sha256Hex(s4a12Bytes).ToLower();
+                        var s4a12Time = File.GetLastWriteTime(s4a12ZipPath);
+                        var s4a12Ver = "ServerS4A12-" + s4a12Time.ToString("yyyyMMdd-HHmm");
+                        var s4a12GmPath = Path.Combine(latestCacheDir, "DfoGmTool-latest.zip");
+                        var s4a12GmSha = "";
+                        long s4a12GmSize = 0;
+                        if (File.Exists(s4a12GmPath))
+                        {
+                            var g12 = File.ReadAllBytes(s4a12GmPath);
+                            s4a12GmSha = Compat.Sha256Hex(g12).ToLower();
+                            s4a12GmSize = g12.Length;
+                        }
+                        s4a12Block = new
+                        {
+                            package = "ServerS4A12-latest.zip",
+                            version = s4a12Ver,
+                            release_date = s4a12Time.ToString("yyyy-MM-ddTHH:mm:ss") + "+08:00",
+                            sha256 = s4a12Sha,
+                            size_bytes = s4a12Bytes.Length,
+                            download_gitee = "https://gitee.com/c118oder/ServerS4A12.86JP/raw/main/mirrors/ServerS4A12-latest.zip",
+                            download_github = "https://raw.githubusercontent.com/118coder/ServerS4A12.86JP/main/mirrors/ServerS4A12-latest.zip",
+                            download_codeberg = "https://codeberg.org/118coder/ServerS4A12.86JP/raw/branch/main/mirrors/ServerS4A12-latest.zip",
+                            gm_latest = "DfoGmTool-latest.zip",
+                            gm_sha256 = s4a12GmSha,
+                            gm_size_bytes = s4a12GmSize
+                        };
+                    }
+
+                    var s4a21GmZip = Path.Combine(latestCacheDir, "ServerS4A21-GMTool-latest.zip");
+                    var s4a21GmSha = "";
+                    long s4a21GmSize = 0;
+                    if (File.Exists(s4a21GmZip))
+                    {
+                        var g21 = File.ReadAllBytes(s4a21GmZip);
+                        s4a21GmSha = Compat.Sha256Hex(g21).ToLower();
+                        s4a21GmSize = g21.Length;
+                    }
+
+                    var s4a21Block = new
+                    {
+                        package = "ServerS4A21-latest.zip",
+                        version = pkgName,
+                        release_date = BeijingTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+                        sha256 = sha,
+                        size_bytes = zipSize,
+                        download_gitee = "https://gitee.com/c118oder/ServerS4A12.86JP/raw/main/mirrors/ServerS4A21-latest.zip",
+                        download_github = $"https://raw.githubusercontent.com/{GitHubRepo}/main/mirrors/ServerS4A21-latest.zip",
+                        download_codeberg = "https://codeberg.org/118coder/ServerS4A12.86JP/raw/branch/main/mirrors/ServerS4A21-latest.zip",
+                        gm_latest = "ServerS4A21-GMTool-latest.zip",
+                        gm_sha256 = s4a21GmSha,
+                        gm_size_bytes = s4a21GmSize
+                    };
+
                     var meta = JsonSerializer.Serialize(new
                     {
                         version = pkgName,
@@ -318,7 +381,9 @@ public class MirrorUploadService
                         size_bytes = zipSize,
                         download_gitee = gtDownloadUrl,
                         download_github = ghDownloadUrl,
-                        download_codeberg = cbDownloadUrl
+                        download_codeberg = cbDownloadUrl,
+                        s4a21 = s4a21Block,
+                        s4a12 = s4a12Block
                     });
                     var metaBytes = Encoding.UTF8.GetBytes(meta);
 

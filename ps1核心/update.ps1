@@ -56,6 +56,8 @@ if ((Get-Item $ScriptRoot).Name -eq 'ps1核心') { $ScriptRoot = (Get-Item $Scri
 # 这是更新操作的目标目录，所有文件都会同步到这里
 $SrcRoot = Join-Path $ScriptRoot "ServerS4A21-AUM"
 
+Write-Host "【本工具-S4A12-AUM 已经停止维护，AUM 全面转向 S4A21 版本】" -ForegroundColor DarkYellow
+
 # ==================================================================
 #  仓库连接配置（重要！假如仓库地址或令牌变了，改这里）
 # ==================================================================
@@ -583,6 +585,13 @@ function Sync-CommitHistory {
         # 将 API 返回的 JSON 转成对象数组
         $items = $utf8.GetString($r1.RawContentStream.ToArray()) | ConvertFrom-Json
         if ($items.Count -eq 0) {
+            # ServerS4A21 的 commits API 偶发返回 200 但空数组 []（网络/限流/参数波动）
+            # 不能据此丢弃缓存：有历史缓存则原样返回（保留已有提交段），仅缓存也为空才报告无数据
+            if ($known.Count -gt 0) {
+                $merged = @($known.Values | Sort-Object {[DateTimeOffset]"$($_.Date)"} -Descending)
+                Write-Host "[提交日志] API 返回空数组，保留缓存 $($merged.Count) 条提交（不触发镜像整体覆盖）。"
+                return @{ Commits=$merged; Complete=$true; Refreshed=$false }
+            }
             return @{ Commits=@(); Complete=$false; Refreshed=$false }
         }
 
@@ -2061,7 +2070,6 @@ try {
 
     # ---- 拉取并组织提交日志 ----
     $allGrouped = @{}
-    $mirrorLogUsed = $false
 
     if (-not $SkipCommitLog) {
         # --- 方案 A：优化方案（带缓存 + 并行拉取） ---
@@ -2133,8 +2141,10 @@ try {
         }
 
         # v1.911: GitGud API 无数据 → 从镜像下载缓存日志
+        # v1.918: 镜像日志只作为"提交历史补充数据源"，不再整文件覆盖本地日志 —
+        #         最终日志仍由本次生成（版本头=本次日期），镜像提交段并入 $allGrouped 去重
         if ($allGrouped.Count -eq 0) {
-            Write-Host "[提交日志] GitGud API 无数据，从镜像下载缓存日志..."
+            Write-Host "[提交日志] GitGud API 无数据，从镜像下载缓存日志作为补充..."
             $mirrorLog = Join-Path $env:TEMP "mirror-log.txt"
             Remove-Item $mirrorLog -Force -ErrorAction SilentlyContinue
             $logOk = $false
@@ -2152,11 +2162,24 @@ try {
                 } catch {}
             }
             if ($logOk) {
-                Write-Host "[提交日志] 镜像日志下载成功，使用镜像版本。"
-                Copy-Item $mirrorLog $LogFile -Force
-                Remove-Item $mirrorLog -Force
-                Write-Host "[提交日志] 已输出 更新日志.txt (来自镜像)"
-                $mirrorLogUsed = $true
+                Write-Host "[提交日志] 镜像日志下载成功，解析其中的提交历史..."
+                # 解析镜像日志: "--- 日期 (n commits) ---" 段头 + "  " 开头的提交消息行
+                $mirrorText = [System.IO.File]::ReadAllText($mirrorLog, $utf8)
+                $curD = $null
+                foreach ($ml in ($mirrorText -split "`r?`n")) {
+                    $mt = $ml.Trim()
+                    if ($mt -match "^--- (\d{4}-\d{2}-\d{2})") {
+                        $curD = $Matches[1]
+                        if (-not $allGrouped.ContainsKey($curD)) { $allGrouped[$curD] = @() }
+                    }
+                    elseif ($curD -and $mt -like "  *" -and $mt.Length -gt 2) {
+                        $msg = $mt.Trim()
+                        if ($msg.Length -gt 0 -and $allGrouped[$curD] -notcontains $msg) {
+                            $allGrouped[$curD] += $msg
+                        }
+                    }
+                }
+                Write-Host "[提交日志] 镜像日志并入完成（共 $($allGrouped.Count) 个日期分组）。"
             }
             Remove-Item $mirrorLog -Force -ErrorAction SilentlyContinue
         }
@@ -2165,7 +2188,7 @@ try {
     # ---- 按日期排序 ----
     # $sortedDates: 降序（最新的在前面，用于写入日志文件）
     # $sortedDatesAsc: 升序（最旧的在前面，用于控制台输出）
-    if (-not $mirrorLogUsed) {
+    # 镜像日志已并入数据源（不整文件覆盖），本地日志始终由本次生成 → 版本头 = 本次更新日期
     $sortedDates = $allGrouped.Keys | Sort-Object -Descending
     $sortedDatesAsc = $allGrouped.Keys | Sort-Object
     $totalCommits = 0
@@ -2243,8 +2266,7 @@ try {
         Write-Host ((T "s_more") + (T "fn_log"))
         Write-Host ((T "s_repo") + "https://gitgud.io/rewio/ServerS4A21/-/commits/master")
     }
-    }  # end if (-not $mirrorLogUsed)
-}
+    }
 
 # ==================================================================
 #  脚本结束

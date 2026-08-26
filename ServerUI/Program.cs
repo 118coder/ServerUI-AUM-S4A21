@@ -48,7 +48,7 @@ static class Program
      * 这是 Windows Forms 项目的固定写法，不要修改
      */
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
         // v1.913: 启动前先写日志（捕获 DPI 初始化之前的无声崩溃）
         var startupLog = Path.Combine(AppContext.BaseDirectory, "ServerUI-启动日志.txt");
@@ -64,6 +64,26 @@ static class Program
         Application.ThreadException += (s, e) =>
             Report(e.Exception, "ThreadException");
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+
+        // ===== 时间调节工具命令行模式 =====
+        // 由主界面的【调整系统时间】页在需要管理员权限时提权调用自身:
+        //   --settime "yyyy-MM-dd HH:mm:ss"   写入指定系统时间
+        //   --synctime                         同步网络标准时间
+        // 提权实例不创建任何窗口, 完成操作后把结果写入
+        // %TEMP%\serverui_time_result.txt 供主界面读取显示
+        if (args.Length > 0)
+        {
+            if (args[0] == "--settime" && args.Length > 1)
+            {
+                TimeTool.ApplyFromArg(args[1]);
+                return;
+            }
+            if (args[0] == "--synctime")
+            {
+                TimeTool.SyncFromArg();
+                return;
+            }
+        }
 
         try
         {
