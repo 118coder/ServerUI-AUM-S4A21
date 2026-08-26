@@ -33,6 +33,8 @@ public partial class MainForm : AntdUI.Window
     AntdUI.Label lbDllSt;                  // DLL扩展页状态标签
     bool _dllSyncing;                      // 开关状态同步标志 (避免 RefreshDllState 触发"未应用"提示)
     bool _patchInstalled;                  // 游戏根目录是否已安装 DLL 扩展 (挂载器文件或 [Plugins] 记录存在)
+    List<string> _custRows = new();        // 自定义扩展文件名顺序（当前刷新结果, 供【应用更改】读取勾选）
+    readonly Dictionary<string, AntdUI.Switch> _swCust = new(StringComparer.OrdinalIgnoreCase); // 自定义扩展行开关（文件名 → 开关）
 
 
     // 客户端补丁受管理的插件 — 对应 客户端补丁.zip 内 GameGaurd.ini [Plugins] 列表
@@ -126,7 +128,7 @@ public partial class MainForm : AntdUI.Window
             Padding = new Padding(14, 8, 14, 8)
         };
         tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 56F));    // 开关/图标
-        tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));   // 名称
+        tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 205F));   // 名称（DLL 文件名较长, 加宽避免换行/截断）
         tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));    // 说明/操作
         _dllTbl = tbl;
         scroll.Controls.Add(tbl);
@@ -183,7 +185,7 @@ public partial class MainForm : AntdUI.Window
 
         var lbOp = new AntdUI.Label
         {
-            Text = "添加扩展 = 选择自己的插件挂载（复制到游戏根目录 + 写入 GameGaurd.ini）；删除扩展 = 移除已挂载的自定义插件，列表行右侧可逐个删除",
+            Text = "添加扩展 = 选择自己的插件挂载（复制到游戏根目录 + 写入 GameGaurd.ini）；删除扩展 = 移除已挂载的自定义插件；自定义扩展行有开关，取消勾选后应用 = 从列表移除（文件保留）",
             Font = new Font("Microsoft YaHei UI", 8.5f),
             ForeColor = Color.FromArgb(130, 130, 138),
             Dock = DockStyle.Fill,
@@ -233,8 +235,8 @@ public partial class MainForm : AntdUI.Window
                         if (v.Length == 0) continue;
                         hasPlugins = true;
                         iniSet.Add(v);
-                        if (!IsManagedDll(v) && !IsSystemDll(v))
-                            custom.Add(v);   // 自定义扩展 = 非受管且非游戏自带插件 (启动器列表项可为 DLL 或 INI)
+                        if (!IsManagedDll(v))
+                            custom.Add(v);   // 自定义扩展 = 非受管插件 (S4A21MemOpt.dll 等第三方插件同样归入, 自由管理)
                     }
                 }
             }
@@ -261,19 +263,24 @@ public partial class MainForm : AntdUI.Window
                 }
             }
 
+            _custRows.Clear();
+            _custRows.AddRange(custom);
             RebuildDllRows(custom);
 
             int on = 0;
             for (int i = 0; i < DllPlugins.Length; i++)
                 if (swDlls[i].Checked) on++;
+            int onCust = 0;
+            foreach (var s in _swCust.Values)
+                if (s.Checked) onCust++;
             if (lbDllSt != null)
                 lbDllSt.Text = !_patchInstalled
                     ? "未安装 DLL 扩展：游戏根目录未发现补丁文件，请先点击【新DLL安装】"
                     : "受管插件已启用 " + on + " / " + DllPlugins.Length
-                        + " · 自定义扩展 " + custom.Count + " 个 → GameGaurd.ini";
+                        + " · 自定义扩展 已勾选 " + onCust + " / " + custom.Count + " → GameGaurd.ini";
             Lg(!_patchInstalled
                 ? ">>> [DLL扩展] 未安装：游戏根目录未发现补丁文件（挂载器/插件列表均无）"
-                : ">>> [DLL扩展] 已刷新: 受管插件 " + on + " 个已启用, 自定义扩展 " + custom.Count + " 个", Txt2);
+                : ">>> [DLL扩展] 已刷新: 受管插件 " + on + " 个已启用, 自定义扩展 " + onCust + " 个已勾选", Txt2);
         }
         catch (Exception ex)
         {
@@ -292,9 +299,7 @@ public partial class MainForm : AntdUI.Window
         return false;
     }
 
-    /* 游戏自带、不可删除的系统插件 */
-    bool IsSystemDll(string file) =>
-        file.Equals("S4A21MemOpt.dll", StringComparison.OrdinalIgnoreCase);
+    // 第三方插件不设"内置/自带"限制：S4A21MemOpt.dll 等非受管插件均按普通扩展自由管理
 
     /* 原生整合补丁（GameNative）— 必选插件判定 */
     bool IsGameNative(string file) =>
@@ -391,6 +396,17 @@ public partial class MainForm : AntdUI.Window
     {
         var tbl = _dllTbl;
         if (tbl == null) return;
+        _swCust.Clear();
+        // 运行期重建表格时按窗体 AutoScale 因子补偿字体/控件尺寸:
+        // AutoScaleMode.Font 只缩放首次创建的控件, 重建的新控件若不补偿会整体变小（界面/字体缩小）
+        float k = 1f;
+        if (IsHandleCreated)
+        {
+            // 用窗口当前 DPI 相对 96 的比值作缩放因子:
+            // 窗体首次 AutoScale（Font 模式 ≈ DPI 比例）只缩放首批控件, 运行期重建控件需手动补偿
+            int dpi = DeviceDpi;
+            if (dpi > 0) k = dpi / 96f;
+        }
         tbl.SuspendLayout();
         // 释放旧行控件（保留受管开关复用），避免多次刷新产生内存垃圾
         foreach (Control c in tbl.Controls)
@@ -418,7 +434,7 @@ public partial class MainForm : AntdUI.Window
             var nt = new AntdUI.Label
             {
                 Text = "—— 未安装 DLL 扩展 ——",
-                Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold),
+                Font = new Font("Microsoft YaHei UI", 10f * k, FontStyle.Bold),
                 ForeColor = Color.FromArgb(150, 150, 158),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -432,7 +448,7 @@ public partial class MainForm : AntdUI.Window
                 Text = "游戏根目录尚未安装客户端补丁（未发现挂载器 GameGaurd.dll / az.dll，且 GameGaurd.ini 无插件记录）。\n\n"
                     + "请到【设置与关于】页点击【新DLL安装】，把 客户端补丁.zip 完整安装到游戏根目录；\n"
                     + "安装完成后本页会自动显示插件列表。",
-                Font = new Font("Microsoft YaHei UI", 8.5f),
+                Font = new Font("Microsoft YaHei UI", 8.5f * k),
                 ForeColor = Color.FromArgb(120, 120, 128),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
@@ -450,8 +466,8 @@ public partial class MainForm : AntdUI.Window
         AddRow(28F);
         var hCap = new AntdUI.Label
         {
-            Text = "已安装插件（勾选受管插件 = 挂载；底部为玩家自定义扩展）",
-            Font = new Font("Microsoft YaHei UI", 8.5f),
+            Text = "已安装插件（勾选 = 挂载；受管插件与自定义扩展均以开关控制，底部为玩家自定义扩展）",
+            Font = new Font("Microsoft YaHei UI", 8.5f * k),
             ForeColor = Color.FromArgb(120, 120, 128),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -468,14 +484,14 @@ public partial class MainForm : AntdUI.Window
             var nm = new AntdUI.Label
             {
                 Text = IsGameNative(p.File) ? p.Name + "（必选）" : p.Name,
-                Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Microsoft YaHei UI", 9.5f * k, FontStyle.Bold),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
             };
             var de = new AntdUI.Label
             {
                 Text = p.Desc + "（" + p.File + "）",
-                Font = new Font("Microsoft YaHei UI", 8.5f),
+                Font = new Font("Microsoft YaHei UI", 8.5f * k),
                 ForeColor = Color.FromArgb(130, 130, 138),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -520,15 +536,15 @@ public partial class MainForm : AntdUI.Window
             }
         }
 
-        // ---- 自定义扩展 分组 ----
+        // ---- 自定义扩展 分组 ----（开关 = 挂载; 取消勾选后应用 = 从 [Plugins] 移除, 文件保留）
         if (custom.Count > 0)
         {
-            AddRow(26F);
+            AddRow(28F);   // 与表头行高等高
             int gro = tbl.RowCount - 1;
             var gCap = new AntdUI.Label
             {
-                Text = "—— 自定义扩展（玩家添加，行尾可删除）——",
-                Font = new Font("Microsoft YaHei UI", 8.5f),
+                Text = "—— 自定义扩展（开关 = 挂载，行尾可删除）——",
+                Font = new Font("Microsoft YaHei UI", 8.5f * k),
                 ForeColor = Color.FromArgb(140, 140, 148),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -541,26 +557,37 @@ public partial class MainForm : AntdUI.Window
                 AddRow(38F);
                 int row = tbl.RowCount - 1;
                 var exists = File.Exists(Path.Combine(_gr, f));
-                var icon = new AntdUI.Label
+
+                // 开关 = 当前挂载（条目在 GameGaurd.ini [Plugins] 中即勾选）
+                var sw = new AntdUI.Switch
                 {
-                    Text = "◆",
-                    Font = new Font("Microsoft YaHei UI", 10f),
-                    ForeColor = Ac,
-                    Dock = DockStyle.Fill,
-                    TextAlign = ContentAlignment.MiddleCenter
+                    Checked = true,
+                    Cursor = Cursors.Hand,
+                    Size = new Size((int)(40f * k), (int)(22f * k)),
+                    Margin = new Padding(6, 7, 0, 0),
+                    Anchor = AnchorStyles.Left
                 };
+                sw.CheckedChanged += (s, e) =>
+                {
+                    if (_dllSyncing) return;
+                    if (lbDllSt != null)
+                        lbDllSt.Text = "已修改（未应用）：点击【应用更改】写入 GameGaurd.ini 生效";
+                };
+                _swCust[f] = sw;
+
+                // 直接显示 DLL / INI 文件名（ForeColor 用主题色, 不用透明色以免文字不可见）
                 var nm = new AntdUI.Label
                 {
                     Text = f,
-                    Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold),
-                    ForeColor = exists ? Color.Empty : Rd,
+                    Font = new Font("Microsoft YaHei UI", 9.5f * k, FontStyle.Bold),   // 与受管行名称同字号（按窗体缩放因子补偿）
+                    ForeColor = exists ? Style.Get(Colour.Text) : Rd,
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft
                 };
                 var st = new AntdUI.Label
                 {
                     Text = exists ? "已挂载（文件在游戏根目录）" : "文件缺失（仅剩 GameGaurd.ini 条目）",
-                    Font = new Font("Microsoft YaHei UI", 8.5f),
+                    Font = new Font("Microsoft YaHei UI", 8.5f * k),
                     ForeColor = exists ? Color.FromArgb(130, 130, 138) : Rd,
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft
@@ -584,11 +611,11 @@ public partial class MainForm : AntdUI.Window
                     BackColor = Color.Transparent
                 };
                 cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90F));
+                cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F));   // 与受管行编辑按钮等宽
                 cell3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
                 cell3.Controls.Add(st, 0, 0);
                 cell3.Controls.Add(del, 1, 0);
-                tbl.Controls.Add(icon, 0, row);
+                tbl.Controls.Add(sw, 0, row);
                 tbl.Controls.Add(nm, 1, row);
                 tbl.Controls.Add(cell3, 2, row);
             }
@@ -600,7 +627,7 @@ public partial class MainForm : AntdUI.Window
             var empty = new AntdUI.Label
             {
                 Text = "—— 暂无自定义扩展（点击下方【添加扩展】挂载自己的插件）——",
-                Font = new Font("Microsoft YaHei UI", 8.5f),
+                Font = new Font("Microsoft YaHei UI", 8.5f * k),
                 ForeColor = Color.FromArgb(120, 120, 128),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -615,7 +642,7 @@ public partial class MainForm : AntdUI.Window
 
     /*
      * 读取 GameGaurd.ini 中当前的"非受管"插件条目
-     * (含游戏自带 S4A21MemOpt.dll 与玩家自定义扩展)
+     * (含 S4A21MemOpt.dll 等非受管插件与玩家自定义扩展)
      */
     List<string> GetNonManagedPlugins()
     {
@@ -665,13 +692,6 @@ public partial class MainForm : AntdUI.Window
                 "添加扩展", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        if (IsSystemDll(file))
-        {
-            MessageBox.Show("「" + file + "」是游戏自带优化插件（S4A21MemOpt.dll），不允许手动重复挂载。",
-                "添加扩展", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
         var existing = GetNonManagedPlugins();
         foreach (var e in existing)
             if (e.Equals(file, StringComparison.OrdinalIgnoreCase))
@@ -744,7 +764,7 @@ public partial class MainForm : AntdUI.Window
                 if (eq > 0 && t.StartsWith("Plugin", StringComparison.OrdinalIgnoreCase))
                 {
                     var v = t.Substring(eq + 1).Trim();
-                    if (v.Length > 0 && !IsManagedDll(v) && !IsSystemDll(v))
+                    if (v.Length > 0 && !IsManagedDll(v))
                         custom.Add(v);
                 }
             }
@@ -893,13 +913,19 @@ public partial class MainForm : AntdUI.Window
                 enabled.Add(f);
         }
 
+        // 收集勾选的自定义扩展（行内开关）— 取消勾选 = 应用后从 [Plugins] 移除条目（文件保留）
+        var customOn = new List<string>();
+        foreach (var f in _custRows)
+            if (_swCust.TryGetValue(f, out var cs) && cs.Checked)
+                customOn.Add(f);
+
         // 未检测到挂载器时提醒先执行【新DLL安装】；但列表仍可直写（文件缺失仅影响加载器加载）
         bool loaderInstalled = File.Exists(Path.Combine(_gr, "GameGaurd.dll"))
             || File.Exists(Path.Combine(_gr, "az.dll"));
         var r = MessageBox.Show(
             "将直写游戏根目录 GameGaurd.ini 的 [Plugins] 插件列表：\n"
-            + "  启用 " + enabled.Count + " 个插件（未勾选的插件条目会从列表移除，文件保留；\n"
-            + "  自定义扩展条目保留；S4A21MemOpt.dll 等原有插件条目保留）"
+            + "  启用受管插件 " + enabled.Count + "（未勾选的受管条目会从列表移除，文件保留；\n"
+            + "  自定义扩展 " + customOn.Count + " 个按开关勾选写入（取消勾选 = 从 [Plugins] 移除，文件保留）"
             + (loaderInstalled ? "" : "\n\n提示：游戏根目录尚未发现挂载器 GameGaurd.dll / az.dll，"
                 + "插件 DLL 文件可能未安装——请先到【设置与关于】页点击【新DLL安装】安装补丁包")
             + "\n\n继续？",
@@ -907,14 +933,14 @@ public partial class MainForm : AntdUI.Window
             MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (r != DialogResult.Yes) return;
 
-        // 直写 GameGaurd.ini（BuildPatchIni 保留注释/非受管条目, 受管条目按勾选重新编号）
+        // 直写 GameGaurd.ini（BuildPatchIni 保留注释, 受管条目按勾选重编号, 自定义扩展按开关勾选写入）
         try
         {
             var iniPath = Path.Combine(_gr, "GameGaurd.ini");
-            File.WriteAllText(iniPath, BuildPatchIni(iniPath, enabled), Encoding.UTF8);
-            Lg(">>> [DLL扩展] 已直写 GameGaurd.ini: 启用插件 " + enabled.Count + " 个", Gn);
+            File.WriteAllText(iniPath, BuildPatchIni(iniPath, enabled, customOn), Encoding.UTF8);
+            Lg(">>> [DLL扩展] 已直写 GameGaurd.ini: 受管插件 " + enabled.Count + " 个, 自定义扩展 " + customOn.Count + " 个", Gn);
             if (lbDllSt != null)
-                lbDllSt.Text = "已应用：启用 " + enabled.Count + " 个插件（直写 GameGaurd.ini）";
+                lbDllSt.Text = "已应用：受管插件 " + enabled.Count + " · 自定义扩展 " + customOn.Count + "（直写 GameGaurd.ini）";
             RefreshDllState();
         }
         catch (Exception ex)
@@ -999,7 +1025,9 @@ public partial class MainForm : AntdUI.Window
         try
         {
             var iniPath = Path.Combine(_gr, "GameGaurd.ini");
-            File.WriteAllText(iniPath, BuildPatchIni(iniPath, enabled), Encoding.UTF8);
+            // 合并保留现有非受管条目（玩家自定义扩展 / S4A21MemOpt.dll 等不因安装而丢失）
+            var keepCustom = GetNonManagedPlugins();
+            File.WriteAllText(iniPath, BuildPatchIni(iniPath, enabled, keepCustom), Encoding.UTF8);
             Lg(">>> [新DLL安装] 客户端补丁已安装: 复制 " + copied + " 个文件, 启用插件 "
                 + enabled.Count + " 个 → GameGaurd.ini", Gn);
             MessageBox.Show(
@@ -1061,15 +1089,17 @@ public partial class MainForm : AntdUI.Window
             }
         }
 
-        // 合并外部传入的插件 (用于追加自定义扩展 等场景), 大小写不敏感去重
+        // 输出集合 = extra（调用方传入）: 添加扩展时 = 全部非受管条目; 【应用更改】时 = 开关勾选的条目
+        // 取消勾选的自定义扩展不再写入（文件保留, 仅移除 [Plugins] 条目）
+        var ext = new List<string>();
         if (extra != null)
         {
             foreach (var e in extra)
             {
                 bool has = false;
-                foreach (var x in existing)
+                foreach (var x in ext)
                     if (x.Equals(e, StringComparison.OrdinalIgnoreCase)) { has = true; break; }
-                if (!has) existing.Add(e);
+                if (!has) ext.Add(e);
             }
         }
 
@@ -1083,7 +1113,7 @@ public partial class MainForm : AntdUI.Window
             {
                 foreach (var c in sectionComments) sb.AppendLine(c);
                 int idx = 0;
-                foreach (var v in existing) sb.AppendLine("Plugin" + (idx++) + "=" + v);
+                foreach (var v in ext) sb.AppendLine("Plugin" + (idx++) + "=" + v);
                 foreach (var v in enabled) sb.AppendLine("Plugin" + (idx++) + "=" + v);
                 wrote = true;
             }
@@ -1095,7 +1125,7 @@ public partial class MainForm : AntdUI.Window
             sb.AppendLine("[Plugins]");
             sb.AppendLine("; 由 ServerUI【DLL扩展】页面管理");
             int idx = 0;
-            foreach (var v in existing) sb.AppendLine("Plugin" + (idx++) + "=" + v);
+            foreach (var v in ext) sb.AppendLine("Plugin" + (idx++) + "=" + v);
             foreach (var v in enabled) sb.AppendLine("Plugin" + (idx++) + "=" + v);
         }
         return sb.ToString().TrimEnd() + "\r\n";

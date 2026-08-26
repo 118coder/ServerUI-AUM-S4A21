@@ -59,7 +59,7 @@ pgXXX.Padding = new Padding(10);                       // 页根（AntdUI.In.Pan
 
 - 页面标题行：`★ Px.x 页面名 ★ — 一句话说明` 注释 + 页根首标签同步；
 - 按钮文案：动词开头（应用更改 / 新DLL安装 / 添加扩展 / 删除扩展 / 刷新状态 / 打开补丁包目录）；
-- 状态行三段式：`结果 + 数量/位置 + 去向`，如 `受管插件已启用 5 / 7 · 自定义扩展 2 个 → GameGaurd.ini`；未安装态单独给引导文案；
+- 状态行三段式：`结果 + 数量/位置 + 去向`，如 `受管插件已启用 5 / 7 · 自定义扩展 已勾选 2 / 2 → GameGaurd.ini`；未安装态单独给引导文案；
 - 日志 `Lg(msg, color)`：成功 `Gn`、警告 `Or`、错误 `Rd`、常规 `Txt2`；前缀 `>>> [模块] 动作: 结果`；
 - GameNative：必选插件锁定开关、取消勾选时应用被拦截（提示语固定）；
 - 与启动器对齐的机制说明（`[Plugins]` 顺序加载、DLL/INI 均可、路径=游戏根目录文件名）在 使用说明 中保留。
@@ -69,11 +69,11 @@ pgXXX.Padding = new Padding(10);                       // 页根（AntdUI.In.Pan
 ```
 _patchInstalled = 存在 GameGaurd.dll / az.dll 或 GameGaurd.ini 有 PluginN= 记录
 ├─ 未安装：空态提示「—— 未安装 DLL 扩展 ——」+ 引导【新DLL安装】；开关全灰；添加/删除扩展拦截
-└─ 已安装：渲染 表头「已安装插件」→ 受管插件行（开关+名称+说明±编辑按钮）→ 自定义扩展分组（图标+名称+删除）
+└─ 已安装：渲染 表头「已安装插件」→ 受管插件行（开关+名称+说明±编辑按钮）→ 自定义扩展分组（开关+文件名+状态+删除，开关=挂载）
 ```
 
 - `RefreshDllState()`：读 ini → 计算 iniSet/custom → 同步开关（GameNative 恒开锁定）→ `RebuildDllRows(custom)` → 刷新状态行与日志；
-- `ApplyDllPatch()`：仅直写 ini（`Encoding.UTF8` 写入），`BuildPatchIni` 保留注释/非受管条目/自定义条目；
+- `ApplyDllPatch()`：仅直写 ini（`Encoding.UTF8` 写入）；`BuildPatchIni` 保留注释、受管条目按勾选重编号、自定义扩展按开关勾选写入（取消勾选 = 移除 `[Plugins]` 条目，文件保留；「添加扩展」时 = 非受管全保留）；
 - `InstallPatchZip()`（设置页）：解压 `实用工具包\DLL覆盖\客户端补丁.zip` → 复制到游戏根（已存在配置 ini 不覆盖）→ 合并 ini（受管全启用）→ `_patchInstalled=true` + `RefreshDllState()`；
 - 受管插件清单唯一维护点：`DllPlugins` 常量（7 项，元组：File/Name/Desc/Config）。
 
