@@ -2,8 +2,10 @@
  * ==================================================================
  * MainForm 页面构建部分 (partial class)
  * 包含: 开始页 / 存档管理页 / 设置与关于页 / 使用说明页 / 日志条
- *       以及页面辅助方法 (LinkRow / ShowHelp / 赛利亚房间修复)
- * 拆分目的: 页面 UI 与业务逻辑分离, 修改单个页面不影响其他部分
+ *       以及页面辅助方法 (LinkRow / ShowHelp / 赛利亚房间修复 / 还原原版PVF)
+ * 独立页面文件 (避免牵一发而动全身, 修改单个页面不影响其他部分):
+ *   - MainForm.DllExt.cs — DLL扩展页 (客户端补丁扩展管理 + 弹窗类)
+ *   - MainForm.Time.cs   — 调整系统时间页
  * ==================================================================
  */
 using System;
@@ -24,6 +26,7 @@ namespace ServerUI;
 
 public partial class MainForm : AntdUI.Window
 {
+
     // ================================================================
     // ★ P1 概览页 ★ — 状态卡片 + 快捷控制 + 快速更新 + 底部链接
     // ================================================================
@@ -87,7 +90,7 @@ public partial class MainForm : AntdUI.Window
         var gg = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3, RowCount = 6,
+            ColumnCount = 3, RowCount = 7,
             BackColor = Color.Transparent
         };
         gg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34F));
@@ -98,6 +101,7 @@ public partial class MainForm : AntdUI.Window
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));   // 可选运行方式 + DX 分段选择器
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));   // 去除水印开关行
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));   // PVF/GM/主存档
+        gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));   // 还原-原版PVF
         gg.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 占位填充行
 
         // [开始游戏] — 绿色、加粗、最大最醒目（主操作）
@@ -243,6 +247,12 @@ public partial class MainForm : AntdUI.Window
         gg.Controls.Add(btPv, 0, 4);
         gg.Controls.Add(btGm, 1, 4);
         gg.Controls.Add(btMD, 2, 4);
+
+        // [还原-原版PVF] — 把 实用工具包\PVF原版\Script.pvf 覆盖回游戏根目录
+        btPvR = B("还原-原版PVF", TTypeMini.Default, "RollbackOutlined");
+        btPvR.Click += (s, e) => RestoreOriginalPvf();
+        gg.Controls.Add(btPvR, 0, 5);
+        gg.SetColumnSpan(btPvR, 3);
         gc.Controls.Add(gg);
         mid.Controls.Add(gc, 0, 0);
 
@@ -651,6 +661,43 @@ public partial class MainForm : AntdUI.Window
         ag.Controls.Add(dz, 0, 4);
     }
 
+
+    /*
+     * 还原-原版PVF — 把 实用工具包\PVF原版\Script.pvf 覆盖到游戏根目录
+     */
+    void RestoreOriginalPvf()
+    {
+        var src = Path.Combine(_ad, "实用工具包", "PVF原版", "Script.pvf");
+        var dst = Path.Combine(_gr, "Script.pvf");
+        if (!File.Exists(src))
+        {
+            Lg(">>> 未找到原版PVF: " + src, Rd);
+            MessageBox.Show("未找到原版PVF文件：" + src
+                + "\n\n请确认 实用工具包\\PVF原版\\Script.pvf 存在。",
+                "还原-原版PVF", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        var r = MessageBox.Show(
+            "将把 实用工具包\\PVF原版\\Script.pvf 覆盖到游戏根目录：\n" + dst + "\n\n"
+            + "（当前客户端 Script.pvf 将被替换为原版，文件大小 "
+            + new FileInfo(src).Length + " 字节）\n\n继续？",
+            "还原-原版PVF",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (r != DialogResult.Yes) return;
+        try
+        {
+            File.Copy(src, dst, true);
+            Lg(">>> 已还原原版PVF → " + dst, Gn);
+        }
+        catch (Exception ex)
+        {
+            Lg(">>> 还原原版PVF失败: " + ex.Message, Rd);
+            MessageBox.Show("还原失败：" + ex.Message,
+                "还原-原版PVF", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+
     // ================================================================
     // ★ P3 设置与关于页 ★ — 关于 / 仓库链接 / 实用工具
     // ================================================================
@@ -830,12 +877,11 @@ public partial class MainForm : AntdUI.Window
         g3.Controls.Add(btFix, 0, 2);
         g3.Controls.Add(fixTip, 1, 2);
 
-        // [待定2] — 原"安装新安全DLL"按钮 (绿色 Success)
-        // S4A21 版本服务端与游戏本体已无此问题，功能暂时移除；保留按钮以备未来需要
-        var btSec = B("待定2", TTypeMini.Success, "SafetyCertificateOutlined");
-        btSec.Click += (s, e) =>
-            Lg("【待定2】原\"安装新安全DLL\"功能已暂时移除（S4A21 已无此问题），按钮保留", Txt2);
-        var secTip = L("功能已暂时移除（S4A21 版本已无此问题），按钮保留待定2", 8.5f);
+        // [新DLL安装] — 把 实用工具包\DLL覆盖\客户端补丁.zip 完整安装到游戏根目录
+        // 安装后【DLL扩展】页只直写 GameGaurd.ini 的 [Plugins] 列表，不再重复解压
+        var btSec = B("新DLL安装", TTypeMini.Success, "DownloadOutlined");
+        btSec.Click += (s, e) => InstallPatchZip();
+        var secTip = L("把 实用工具包\\DLL覆盖\\客户端补丁.zip 完整安装到游戏根目录：复制补丁文件（GameGaurd.dll / az.dll / 插件 DLL / 配置 ini 等）并合并 GameGaurd.ini 的 [Plugins] 列表（受管插件默认全启用，已编辑过的配置 ini 保留不覆盖）", 8.5f);
         secTip.TextAlign = ContentAlignment.MiddleLeft;
         secTip.TextMultiLine = true;
         g3.Controls.Add(btSec, 0, 3);
@@ -1131,6 +1177,16 @@ public partial class MainForm : AntdUI.Window
              "备份机制", "SafetyOutlined", "备份机制",
              "每次切换存档时自动备份当前存档。\n\n备份位置：AUM管理组件\\存档管理\\备份存档\\backup_日期_时间\n\n规则：\n· 最多保留最近 10 个备份（更早的自动删除）\n· 「撤销换挡」从最新备份恢复\n· 建议定期手动导出重要存档到安全位置"),
 
+            ("扩展功能",
+             "DLL扩展的使用方式", "ApiOutlined", "DLL扩展（客户端补丁）",
+             "管理游戏根目录 GameGaurd.ini 的 [Plugins] 插件列表（与游戏启动器同源机制）。\n\n使用方法：\n  1. 首次使用：到【设置与关于】页点击【新DLL安装】，把 实用工具包\\DLL覆盖\\客户端补丁.zip 完整安装到游戏根目录（挂载器 GameGaurd.dll / az.dll / 插件 DLL / 配置 ini 等一次装好）\n  2. 进入【DLL扩展】页面\n  3. 勾选/取消需要启用的插件（防止窗口最小化 / 游戏多开 / 自动连发 / 一键换装 / DPS 统计 等）\n  4. 点击「应用更改」——只直写游戏根目录 GameGaurd.ini 的 [Plugins] 列表，不再解压补丁包\n\n必选规则：\n· 原生整合补丁（GameNative）为必选插件，开关已锁定为开启状态，取消勾选将无法应用修改\n\n配置编辑：\n· 自动连发 / DPS 统计 / 战斗力显示 行尾有「编辑」按钮，点击打开独立编辑窗口，可轻松修改 AutoFire.ini / DpsMeter.ini / CombatPower.ini\n· 保存后写入游戏根目录；应用更改不会覆盖已编辑的配置（需要恢复默认模板时，删除游戏根目录中对应 ini 后重新【新DLL安装】）\n\n自定义扩展：\n· 添加扩展 — 选择 DLL 或 INI 文件（与游戏启动器「添加扩展」一致），自动复制到游戏根目录并追加写入 [Plugins] 挂载\n· 删除扩展 — 弹窗选择要移除的自定义扩展（列表行尾也有「删除」按钮），可一并删除游戏根目录文件\n\n与启动器一致的机制：\n· 本页管理的插件列表就是 GameGaurd.ini 的 [Plugins] 节；GameGaurd.dll 加载后按列表顺序逐项加载\n· 列表项可以是 DLL 或 INI（INI 扩展由启动器的加载器按配置注入处理）\n· 条目路径按文件名从游戏根目录（GameGaurd.dll 所在目录）加载，因此添加时会自动复制文件过去\n\n提示：\n· 列表可滚动，插件多时用滚轮或拖动滚动条查看\n· 原有插件（如 S4A21MemOpt.dll）会保留\n· 取消勾选后应用 = 从 [Plugins] 列表移除该插件（文件保留）\n· 修改后重启游戏客户端生效"),
+            ("扩展功能",
+             "调整系统时间的使用方式", "ClockCircleOutlined", "调整系统时间",
+             "手动或联网校准系统时间。\n\n功能：\n· 目标时间 — 选择日期时间后点击「应用此时间」写入系统\n· 读取系统时间 — 把当前系统时间填入选择器\n· 快速调整 — 一键切换到 2015 / 2017 / 2006 时间\n· 同步网络时间 — 从 NTP 服务器（ntp.aliyun.com / cn.pool.ntp.org / time.windows.com 等）获取标准时间并校准\n\n提示：\n· 写入系统时间需要管理员权限（自动弹 UAC 确认）\n· 同步网络时间需要联网"),
+            ("扩展功能",
+             "还原原版PVF的使用方式", "RollbackOutlined", "还原-原版PVF",
+             "把 实用工具包\\PVF原版\\Script.pvf 还原覆盖到游戏根目录。\n\n使用方法：\n  1. 回到【开始】页\n  2. 点击「打开PVF目录」下方的「还原-原版PVF」按钮\n  3. 确认后自动覆盖游戏根目录（"+_gr+"）的 Script.pvf\n\n适用场景：\n· 客户端资源脚本被修改后想恢复官方原版"),
+
             ("日志区",
              "日志工具", "ConsoleSqlOutlined", "运行日志",
              "窗口底部常驻的运行日志条。\n\n功能：\n· 复制日志 — 把日志全文复制到剪贴板\n· 清空日志 — 清空当前显示与缓存\n· 折叠按钮（右下角）— 收起/展开日志区\n· 跳过更新日志 — 更新时不拉取提交记录（橙色）\n· 镜像下载 — 跳过 GitGud 直接使用镜像源（橙色）\n\n提示：更新期间底部会实时显示进度条与百分比"),
@@ -1245,7 +1301,7 @@ public partial class MainForm : AntdUI.Window
         };
         lbHelpBody = new AntdUI.Label
         {
-            Text = "左侧列出了本程序所有功能按钮，点击任意一个即可查看对应的详细使用说明。\n\n包括：服务端控制、运行方式、目录与工具、更新管理、存档管理、日志区 共 6 大类功能。",
+            Text = "左侧列出了本程序所有功能按钮，点击任意一个即可查看对应的详细使用说明。\n\n包括：服务端控制、运行方式、目录与工具、更新管理、存档管理、扩展功能（DLL扩展 / 调整系统时间 / 还原原版PVF）、日志区 共 7 大类功能。",
             Font = new Font("Microsoft YaHei UI", 10f),
             ForeColor = Color.FromArgb(150, 150, 158),
             TextAlign = ContentAlignment.TopLeft,
