@@ -9,10 +9,10 @@
     <AssemblyName>ServerUI-Win7</AssemblyName>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <Version>2.1</Version>
-    <AssemblyVersion>2.1.0.0</AssemblyVersion>
-    <FileVersion>2.1.0.0</FileVersion>
-    <InformationalVersion>2.1-V</InformationalVersion>
+    <Version>2.11</Version>
+    <AssemblyVersion>2.11.0.0</AssemblyVersion>
+    <FileVersion>2.11.0.0</FileVersion>
+    <InformationalVersion>2.11-V</InformationalVersion>
     <ApplicationIcon>图标EXE.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
