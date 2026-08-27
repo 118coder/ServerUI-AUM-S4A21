@@ -459,6 +459,9 @@ public partial class MainForm : AntdUI.Window
 
             tbl.ResumeLayout(true);
             tbl.PerformLayout();
+            // v2.1-4 修复: 重建后强制整表与滚动容器重绘（同下方常规分支）
+            tbl.Invalidate();
+            (tbl.Parent as AntdUI.In.Panel)?.Invalidate(true);
             return;
         }
 
@@ -485,6 +488,7 @@ public partial class MainForm : AntdUI.Window
             {
                 Text = IsGameNative(p.File) ? p.Name + "（必选）" : p.Name,
                 Font = new Font("Microsoft YaHei UI", 9.5f * k, FontStyle.Bold),
+                ForeColor = Style.Get(Colour.Text),   // 显式主题前景色：刷新重建后不依赖 Label 默认取色（避免文字失踪）
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
             };
@@ -638,6 +642,10 @@ public partial class MainForm : AntdUI.Window
 
         tbl.ResumeLayout(true);
         tbl.PerformLayout();
+        // v2.1-4 修复: 重建后强制整表与滚动容器重绘
+        // （AntdUI 自绘控件刷新重建后偶发不重绘 → 文字不显示但按钮/开关仍在）
+        tbl.Invalidate();
+        (tbl.Parent as AntdUI.In.Panel)?.Invalidate(true);
     }
 
     /*

@@ -198,12 +198,19 @@ public class ServerService
         var bat = Path.Combine(baseDir, "start-server.bat");
         if (!File.Exists(bat)) return;  // 脚本不存在（可能是首次使用，需要先更新）
 
-        // 【v1.85-1 修复】DfoServer 窗口隐藏失败问题
-        // 根因: DfoServer 由 start-server.bat 在共享控制台中启动，
-        //       MainWindowHandle 归属 cmd.exe 而非 DfoServer.exe，
-        //       事后 ShowWindow() 无法隐藏 DfoServer 窗口。
-        // 方案: CreateNoWindow = true，进程启动时直接不创建控制台窗口，
-        //       这是隐藏控制台程序窗口最可靠的方式。
+        // 【v2.1-3 修复】服务端由 AUM 启动会闪退（手动启动正常）
+        // 根因（双重）:
+        //   1. 权限: app.manifest 为 asInvoker —— 普通启动时 AUM 与子进程均为非管理员,
+        //      DfoServer 需要管理员权限（写数据/绑定端口等）→ 启动即闪退;
+        //      手动"以管理员身份运行"bat 时才有管理员权限 → 正常。
+        //   2. 隐藏方式: v1.85-1 为隐藏窗口用 CreateNoWindow=true, 服务端在无真实控制台
+        //      环境下启动, 与手动双击（有真实控制台）环境不一致, 加剧闪退。
+        // 方案:
+        //   1. app.manifest 改 requireAdministrator —— AUM 强制管理员运行,
+        //      整个进程树（含 DfoServer）自动获得管理员权限 = "所有操作按管理员运行";
+        //   2. CreateNoWindow = false —— 与手动双击完全一致的运行环境（真实控制台）;
+        //   3. 快速隐藏 —— Start 后立即轮询 MainWindowHandle, 控制台出现即隐藏
+        //      （cmd 与 DfoServer 共享同一控制台, 隐藏 cmd 主窗口即隐藏整个共享控制台）。
         _batProcess = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -211,7 +218,7 @@ public class ServerService
                 FileName = bat,
                 WorkingDirectory = baseDir,
                 UseShellExecute = false,
-                CreateNoWindow = true   // 启动时即隐藏，比事后 ShowWindow 更可靠
+                CreateNoWindow = false   // 与手动双击一致, 保证 DfoServer 有真实控制台
             },
             EnableRaisingEvents = true
         };
@@ -227,6 +234,31 @@ public class ServerService
         };
 
         _batProcess.Start();
+
+        // v2.1-3 快速隐藏: 控制台窗口出现后立即隐藏（不必等 Play 的 10 秒兜底任务）
+        // cmd 与 DfoServer 共享同一控制台: 隐藏 cmd 主窗口即隐藏整个共享控制台;
+        // 进程已退出时 MainWindowHandle 访问会抛异常, 由 try/catch 兜底。
+        if (!_batProcess.HasExited)
+        {
+            _ = System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var deadline = DateTime.UtcNow.AddSeconds(5);
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        System.Threading.Thread.Sleep(60);
+                        var hwnd = _batProcess.MainWindowHandle;
+                        if (hwnd != IntPtr.Zero)
+                        {
+                            ShowWindow(hwnd, 0);
+                            break;
+                        }
+                    }
+                }
+                catch { }
+            });
+        }
     }
 
     /*
