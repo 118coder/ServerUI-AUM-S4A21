@@ -147,7 +147,7 @@ public partial class MainForm : AntdUI.Window
 
         var lbSync = new AntdUI.Label
         {
-            Text = "自动从 NTP 服务器（ntp.aliyun.com / cn.pool.ntp.org / time.windows.com 等）获取标准时间并写入系统，无需手动查找时间源。写入需要管理员权限（自动弹 UAC 确认）。",
+            Text = "本工具可以调节系统时间，用于无损修改相关道具物品的使用时间，避免魔改PVF导致错误而造成开发人员的困扰。",
             Font = new Font("Microsoft YaHei UI", 8.5f),
             ForeColor = Color.FromArgb(130, 130, 138),
             Dock = DockStyle.Fill,
