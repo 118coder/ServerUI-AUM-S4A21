@@ -56,7 +56,6 @@ if ((Get-Item $ScriptRoot).Name -eq 'ps1核心') { $ScriptRoot = (Get-Item $Scri
 # 这是更新操作的目标目录，所有文件都会同步到这里
 $SrcRoot = Join-Path $ScriptRoot "ServerS4A21-AUM"
 
-Write-Host "【本工具-S4A12-AUM 已经停止维护，AUM 全面转向 S4A21 版本】" -ForegroundColor DarkYellow
 
 # ==================================================================
 #  仓库连接配置（重要！假如仓库地址或令牌变了，改这里）

@@ -35,6 +35,8 @@ public partial class MainForm : AntdUI.Window
     bool _patchInstalled;                  // 游戏根目录是否已安装 DLL 扩展 (挂载器文件或 [Plugins] 记录存在)
     List<string> _custRows = new();        // 自定义扩展文件名顺序（当前刷新结果, 供【应用更改】读取勾选）
     readonly Dictionary<string, AntdUI.Switch> _swCust = new(StringComparer.OrdinalIgnoreCase); // 自定义扩展行开关（文件名 → 开关）
+    bool _dllRowsBuilt;                  // DLL 扩展表格是否已按当前状态构建（首次/状态变化时才重建）
+    bool _lastPatchInstalled;            // 上次刷新时的补丁安装状态（变化时需重建列表）
 
 
     // 客户端补丁受管理的插件 — 对应 客户端补丁.zip 内 GameGaurd.ini [Plugins] 列表
@@ -45,9 +47,10 @@ public partial class MainForm : AntdUI.Window
         ("MultiInstance.dll",   "游戏多开",        "支持同时运行多个游戏客户端", null),
         ("GameNative.dll",      "游戏原生整合",    "原生层游戏功能整合补丁（必选，不可关闭）", null),
         ("AutoFire.dll",        "自动连发",        "按住攻击键自动连续攻击", "AutoFire.ini"),
-        ("EquipmentSwap.dll",   "一键换装",        "快捷切换预设装备方案（含 EquipmentSwap 界面配置）", null),
+        ("EquipmentSwap.dll",   "一键换装",        "快捷切换预设装备插件，在游戏中按下end呼出，(EquipmentSwap.dll)", null),
         ("DpsMeter.dll",        "DPS 统计",        "战斗中实时统计输出", "DpsMeter.ini"),
         ("CombatPower.dll",     "战斗力显示",      "实时显示角色战斗力", "CombatPower.ini"),
+        ("ImeFix.dll",          "现代输入法兼容插件", "兼容现代输入法（拼音/五笔等）在游戏中正常输入文字", "ImeFix.ini"),
     };
 
     // ================================================================
@@ -263,9 +266,28 @@ public partial class MainForm : AntdUI.Window
                 }
             }
 
-            _custRows.Clear();
-            _custRows.AddRange(custom);
-            RebuildDllRows(custom);
+            // v2.11 修复: 列表内容未变化时不再重建表格 — 重建会触发 AntdUI 自绘控件
+            // 偶发不重绘 → 文字全部失踪只剩按钮。文本数据源常驻内存
+            // （DllPlugins 数组 + custom 列表）, 刷新只同步开关状态, 控件树保留 → 文字永不丢失。
+            bool patchChanged = _patchInstalled != _lastPatchInstalled;
+            _lastPatchInstalled = _patchInstalled;
+            bool listChanged = !_dllRowsBuilt
+                || patchChanged
+                || custom.Count != _custRows.Count
+                || !custom.SequenceEqual(_custRows, StringComparer.OrdinalIgnoreCase);
+            if (listChanged)
+            {
+                _custRows.Clear();
+                _custRows.AddRange(custom);
+                RebuildDllRows(custom);
+            }
+            else
+            {
+                // 列表未变化: 只同步自定义扩展开关（反映 ini 真实勾选状态）, 不重建表格
+                foreach (var f in custom)
+                    if (_swCust.TryGetValue(f, out var sw))
+                        sw.Checked = iniSet.Contains(f);
+            }
 
             int on = 0;
             for (int i = 0; i < DllPlugins.Length; i++)
@@ -459,9 +481,16 @@ public partial class MainForm : AntdUI.Window
 
             tbl.ResumeLayout(true);
             tbl.PerformLayout();
-            // v2.1-4 修复: 重建后强制整表与滚动容器重绘（同下方常规分支）
+            // v2.11 修复: 重建后逐控件强制重绘 + 整表/滚动容器刷新（同下方常规分支）
+            foreach (Control c in tbl.Controls)
+            {
+                c.Invalidate();
+                c.Update();
+            }
             tbl.Invalidate();
+            tbl.Update();
             (tbl.Parent as AntdUI.In.Panel)?.Invalidate(true);
+            _dllRowsBuilt = true;
             return;
         }
 
@@ -642,10 +671,17 @@ public partial class MainForm : AntdUI.Window
 
         tbl.ResumeLayout(true);
         tbl.PerformLayout();
-        // v2.1-4 修复: 重建后强制整表与滚动容器重绘
-        // （AntdUI 自绘控件刷新重建后偶发不重绘 → 文字不显示但按钮/开关仍在）
+        // v2.11 修复: 重建后逐控件强制重绘 + 整表/滚动容器刷新
+        // （AntdUI 自绘控件重建后偶发不重绘 → 文字失踪只剩按钮; 逐控件重绘绝对可靠）
+        foreach (Control c in tbl.Controls)
+        {
+            c.Invalidate();
+            c.Update();
+        }
         tbl.Invalidate();
+        tbl.Update();
         (tbl.Parent as AntdUI.In.Panel)?.Invalidate(true);
+        _dllRowsBuilt = true;
     }
 
     /*
