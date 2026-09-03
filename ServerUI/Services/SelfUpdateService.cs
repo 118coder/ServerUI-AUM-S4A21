@@ -368,7 +368,7 @@ public class SelfUpdateService
             // 新增文件夹随更新自动同步进 AUM管理组件 (ServerUI 源码目录除外)
             try { SyncRepoToAumDir(rootDir, aumRoot); } catch { }
 
-            // R7.6 下载镜像中的更新日志（不编译，直接拉取；仅本地缺失时，避免版本回退）
+            // R7.6 下载镜像中的更新日志并覆盖本地（v2.12: 始终拉取最新镜像日志, 本地日志与镜像保持一致）
             try { await DownloadChangelogFromMirror(aumRoot); } catch { }
 
             // R8 生成替换脚本并退出
@@ -591,22 +591,28 @@ public class SelfUpdateService
         return p.ExitCode;
     }
 
-    static async Task DownloadChangelogFromMirror(string destDir)
+    async Task DownloadChangelogFromMirror(string destDir)
     {
         try
         {
-            // v2.03: 仅当本地不存在 更新日志.txt 时才下载 —
-            // 镜像日志由上传者按次上传, 可能落后于本地(版本回退), 绝不覆盖本地
+            // v2.12 修复: 启用镜像仓库时总是拉取镜像更新日志并覆盖本地 —
+            // 旧逻辑"仅本地缺失时下载"导致本地已有日志时镜像日志从不拉取（用户实测确认仍失败）;
+            // 镜像日志由开发者每次更新时上传, 以镜像为准覆盖本地, 保证本地日志与镜像保持一致。
             var dest = Path.Combine(destDir, "更新日志.txt");
-            if (File.Exists(dest))
-                return;
+            var destDirInfo = new DirectoryInfo(destDir);
+            if (!destDirInfo.Exists) return;
 
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
             client.DefaultRequestHeaders.Add("User-Agent", "ServerUI-AUM");
 
+            // v2.13: S4A21 镜像日志统一用 S4A21更新日志.txt，与 S4A12-AUM 上传的
+            // 更新日志.txt 区分开，避免两个工具共用镜像仓库互相覆盖。
+            // 拉取顺序: Gitee(国内直连优先) → GitHub → Codeberg(兜底) — 很多人连不上 GitHub，
+            // 国内用户 Gitee 最快，故 Gitee 排第一。
             var urls = new[] {
-                "https://raw.githubusercontent.com/118coder/ServerS4A12.86JP/main/mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt",
-                "https://codeberg.org/118coder/ServerS4A12.86JP/raw/branch/main/mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt"
+                UpdateService.MirrorGiteeRaw    + "/mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt",
+                UpdateService.MirrorGitHubRaw   + "/mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt",
+                UpdateService.MirrorCodebergRaw + "/mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt"
             };
 
             foreach (var url in urls)
@@ -617,11 +623,13 @@ public class SelfUpdateService
                     if (data.Length > 100)
                     {
                         File.WriteAllBytes(dest, data);
+                        OutputReceived?.Invoke($"[AUM更新] 镜像更新日志已拉取: {data.Length}B → {dest}");
                         return;
                     }
                 }
                 catch { }
             }
+            OutputReceived?.Invoke("[AUM更新] 镜像更新日志拉取失败（三个镜像均不可达或日志为空）");
         }
         catch { }
     }

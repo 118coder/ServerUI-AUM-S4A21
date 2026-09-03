@@ -580,12 +580,14 @@ public class MirrorUploadService
             var sha = Compat.Sha256Hex(bytes).ToLower();
             OutputReceived?.Invoke($"[镜像] 更新日志 SHA:{sha.Substring(0, 8)}... 大小:{bytes.Length}B");
 
-            // 先检查 GitHub 上的 SHA 是否已相同（快速跳过）
+            // 先检查 GitHub 上的 S4A21 镜像日志 SHA 是否已相同（快速跳过）——
+            // v2.12-2: 镜像日志统一命名 S4A21更新日志.txt，与 S4A12-AUM 上传的
+            // 更新日志.txt 区分，避免两个工具共用镜像仓库时互相覆盖。
             try
             {
                 var token = Decode2("WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=");
                 var req = new HttpRequestMessage(HttpMethod.Get,
-                    $"https://api.github.com/repos/{GitHubRepo}/contents/mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt?ref=main");
+                    $"https://api.github.com/repos/{GitHubRepo}/contents/mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt?ref=main");
                 req.Headers.Add("Authorization", "token " + token);
                 var resp = await _http.SendAsync(req);
                 if (resp.IsSuccessStatusCode)

@@ -125,7 +125,8 @@ public class GiteeAdapter : IMirrorPlatform
         try
         {
             // 显式编码中文文件名，避免 Uri 构造时的编码歧义
-            var encodedName = Uri.EscapeDataString("更新日志.txt");
+            // v2.12-2: S4A21 镜像日志统一命名为 S4A21更新日志.txt（与 S4A12 的 更新日志.txt 区分，避免互相覆盖）
+            var encodedName = Uri.EscapeDataString("S4A21更新日志.txt");
             return await UploadFileAsync("mirrors/" + encodedName, data, message);
         }
         catch { return false; }
