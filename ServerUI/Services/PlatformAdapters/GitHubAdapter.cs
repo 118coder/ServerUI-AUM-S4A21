@@ -129,7 +129,8 @@ public class GitHubAdapter : IMirrorPlatform
     {
         try
         {
-            var path = "mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt";
+            // v2.12-2: S4A21 镜像日志统一为 S4A21更新日志.txt（与 S4A12 的 更新日志.txt 区分，避免互相覆盖）
+            var path = "mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt";
             var url = $"https://api.github.com/repos/{Repo}/contents/{path}";
 
             string existingSha = null;

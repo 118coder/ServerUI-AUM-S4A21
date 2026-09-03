@@ -668,7 +668,8 @@ public partial class MainForm : AntdUI.Window
     void RestoreOriginalPvf()
     {
         var src = Path.Combine(_ad, "实用工具包", "PVF原版", "Script.pvf");
-        var dst = Path.Combine(_gr, "Script.pvf");
+        var dst = Path.Combine(_gr, "Script.pvf");   // 客户端 PVF（游戏根）
+        var dstSvr = Path.Combine(_ad, "ServerS4A21-AUM", "dist", "win-x64", "Data", "Pvf", "Script.pvf");   // 服务端 PVF（运行目录）
         if (!File.Exists(src))
         {
             Lg(">>> 未找到原版PVF: " + src, Rd);
@@ -678,8 +679,10 @@ public partial class MainForm : AntdUI.Window
             return;
         }
         var r = MessageBox.Show(
-            "将把 实用工具包\\PVF原版\\Script.pvf 覆盖到游戏根目录：\n" + dst + "\n\n"
-            + "（当前客户端 Script.pvf 将被替换为原版，文件大小 "
+            "将把 实用工具包\\PVF原版\\Script.pvf 覆盖到：\n"
+            + "  [客户端] " + dst + "\n"
+            + "  [服务端] " + dstSvr + "\n\n"
+            + "（客户端与服务端 Script.pvf 均将替换为原版，文件大小 "
             + new FileInfo(src).Length + " 字节）\n\n继续？",
             "还原-原版PVF",
             MessageBoxButtons.YesNo, MessageBoxIcon.Question);
@@ -687,7 +690,21 @@ public partial class MainForm : AntdUI.Window
         try
         {
             File.Copy(src, dst, true);
-            Lg(">>> 已还原原版PVF → " + dst, Gn);
+            Lg(">>> 已还原原版PVF → [客户端] " + dst, Gn);
+            var svrDir = Path.GetDirectoryName(dstSvr);
+            if (svrDir != null && Directory.Exists(svrDir))
+            {
+                File.Copy(src, dstSvr, true);
+                Lg(">>> 已还原原版PVF → [服务端] " + dstSvr, Gn);
+            }
+            else
+            {
+                Lg(">>> 服务端 PVF 目录不存在，跳过服务端还原（" + svrDir + "）", Color.Gold);
+            }
+            // v2.12: 还原成功提示（含后续操作建议）
+            const string tip = "已成功还原PVF，以防止BUG出现，可以在设置-进行本地编译，重新对服务端进行编译。";
+            Lg(">>> " + tip, Gn);
+            MessageBox.Show(tip, "还原-原版PVF", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {

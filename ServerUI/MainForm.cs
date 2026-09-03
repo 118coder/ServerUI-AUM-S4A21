@@ -61,9 +61,9 @@ public partial class MainForm : AntdUI.Window
 
     // VER = 当前工具版本号 — 显示在窗口标题和启动日志中
 #if NET48
-    internal const string VER = "2.12-V";   // Win7 兼容模式
+    internal const string VER = "2.13-V";   // Win7 兼容模式
 #else
-    internal const string VER = "2.12";
+    internal const string VER = "2.13";
 #endif
 
     // ===== 路径计算 =====

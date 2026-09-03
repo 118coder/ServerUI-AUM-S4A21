@@ -10,7 +10,7 @@
  * 【v1.911 更新】
  *   - 新增镜像源可达性检测 (CheckMirrorSourcesAsync)
  *   - 新增镜像仓库 URL 常量，供 MainForm 显示
- *   - update.ps1 已集成智能源切换（GitGud 不可达 → GitHub 优先 → Codeberg）
+ *   - update.ps1 已集成智能源切换（GitGud 不可达 → Gitee(国内优先) → GitHub → Codeberg）
  * 
  * 【工作流程】
  *   1. MainForm 调用 RunIncremental() 或 RunFull()
