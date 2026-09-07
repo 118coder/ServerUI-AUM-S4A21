@@ -329,6 +329,8 @@ public class ArchiveService
 
     /*
      * 导入 ZIP 存档 — 解压覆盖到 Data 目录，同时在切换库创建同名存档文件夹
+     * v2.15: 覆盖前先把当前 inventory* 文件备份到 备份存档\backup_* (与切换/拖拽同规格),
+     * 导错包时可撤销, 不再直接覆盖丢失当前存档
      */
     public void ImportFromZip(string baseDir, string zipPath)
     {
@@ -341,6 +343,15 @@ public class ArchiveService
         try
         {
             ZipFile.ExtractToDirectory(zipPath, tempDir);
+
+            // v2.15: 覆盖前备份当前所有 inventory* 文件
+            var bakDir = BackupDir(baseDir);
+            var backupFolder = Path.Combine(bakDir, $"backup_{DateTime.Now:yyyyMMdd_HHmmss}");
+            Directory.CreateDirectory(backupFolder);
+            foreach (var f in GetDataInventoryFiles(baseDir))
+            {
+                try { File.Copy(f, Path.Combine(backupFolder, Path.GetFileName(f)), true); } catch { }
+            }
 
             // 覆盖到主存档目录
             foreach (var f in Directory.GetFiles(tempDir, "inventory*"))

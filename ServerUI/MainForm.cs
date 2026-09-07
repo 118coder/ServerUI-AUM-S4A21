@@ -61,9 +61,9 @@ public partial class MainForm : AntdUI.Window
 
     // VER = 当前工具版本号 — 显示在窗口标题和启动日志中
 #if NET48
-    internal const string VER = "2.13-V";   // Win7 兼容模式
+    internal const string VER = "2.15-V";   // Win7 兼容模式
 #else
-    internal const string VER = "2.13";
+    internal const string VER = "2.15";
 #endif
 
     // ===== 路径计算 =====
@@ -133,6 +133,9 @@ public partial class MainForm : AntdUI.Window
     bool _orphanLogged;                   // 孤儿进程告警只触发一次
     bool _hasSdk;                         // .NET 10 SDK 是否可用
     bool _mirrorOk;                       // 镜像上传令牌是否有效
+    bool _updateBusy;                     // v2.15: 更新防重入标志 (增量/全量共用)
+    System.Threading.Tasks.Task _mirrorTask;  // v2.15: 令牌校验任务 (上传前等待其完成)
+    bool _startFailLogged;                // v2.15: 服务端启动失败提示只输出一次
     bool _logCollapsed;                   // 日志条是否折叠
     bool _dxReady;                        // DX 分段选择器是否已完成初始化
     MiniForm _miniForm;                   // 极简模式窗口 (独立小窗口)
@@ -191,6 +194,17 @@ public partial class MainForm : AntdUI.Window
         // 创建界面 + 启动定时器
         Build();
         Ti();
+
+        // v2.15: AUM 自更新完成回调只在构造时订阅一次
+        // (旧逻辑每次点击【更新AUM】都 += 一个新 lambda, 多次更新后日志成对重复)
+        _au.Completed += ok =>
+        {
+            if (ok) Lg("[AUM更新] 编译成功，即将自动重启...", Gn);
+            else Lg("[AUM更新] 更新流程中断，可稍后重试。", Or);
+        };
+
+        // v2.15: 服务端启动/清理通知 → 运行日志
+        _sv.NoticeReceived += m => Lg(m, Or);
 
         // 双缓冲 — 减少容器重绘闪烁/残影 (TableLayoutPanel 等默认无双缓冲)
         EnableDoubleBuffer(this);

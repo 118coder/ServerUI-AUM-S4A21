@@ -228,7 +228,7 @@ public partial class MainForm : AntdUI.Window
             bool hasPlugins = false;
             if (File.Exists(iniPath))
             {
-                foreach (var raw in File.ReadAllLines(iniPath))
+                foreach (var raw in ReadIniLines(iniPath))
                 {
                     var t = raw.Trim();
                     int eq = t.IndexOf('=');
@@ -343,7 +343,11 @@ public partial class MainForm : AntdUI.Window
         else
         {
             var tpl = ExtractPatchZipEntry(iniName);
-            text = tpl ?? "（未找到 " + iniName + " 模板，将新建配置文件）\n";
+            // v2.15: 模板缺失时编辑器初始为空文本 — 旧占位提示文字不是合法的 ini 内容,
+            // 用户直接保存会把"（未找到 xx 模板…）"写进新建配置文件首行
+            text = tpl ?? "";
+            if (tpl == null)
+                Lg(">>> [DLL扩展] 未找到 " + iniName + " 模板，已创建空配置（保存后写入游戏根目录）", Or);
         }
 
         var r = IniEditorForm.Edit(this, pluginName + " · " + iniName, text, dstPath, enc != null);
@@ -389,6 +393,49 @@ public partial class MainForm : AntdUI.Window
         return enc.GetString(bytes);
     }
 
+    /*
+     * GameGaurd.ini 专用编码探测读取 (v2.15)
+     * 判定顺序: UTF-8 BOM → 严格 UTF-8 → GBK(936); 通过 out 参数返回"写回时应使用的编码",
+     * 写回保持原编码不变 — 旧链路"UTF-8 读 + UTF-8(BOM) 写"会把 GBK 配置文件的
+     * 中文注释永久损坏成 U+FFFD (锟斤拷), 且带 BOM 还可能干扰按 ANSI 读取的原生加载器。
+     * 文件不存在时返回空文本 + UTF-8 无 BOM (与补丁包模板一致)
+     */
+    string ReadIniText(string path, out Encoding writeEnc)
+    {
+        writeEnc = new UTF8Encoding(false);
+        if (!File.Exists(path)) return "";
+        var bytes = File.ReadAllBytes(path);
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+        {
+            writeEnc = new UTF8Encoding(true);
+            return new UTF8Encoding(true).GetString(bytes, 3, bytes.Length - 3);
+        }
+        try
+        {
+            var s = new UTF8Encoding(false, true).GetString(bytes);
+            writeEnc = new UTF8Encoding(false);
+            return s;
+        }
+        catch (DecoderFallbackException) { }
+        var gbk = Encoding.GetEncoding(936);
+        writeEnc = gbk;
+        return gbk.GetString(bytes);
+    }
+
+    /* GameGaurd.ini 编码感知按行读取 (替代 File.ReadAllLines 的默认 UTF-8 读取) */
+    string[] ReadIniLines(string path)
+    {
+        var text = ReadIniText(path, out _);
+        return text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+    }
+
+    /* GameGaurd.ini 按原编码写回 (v2.15) — GBK 文件写 GBK, UTF-8(BOM/无BOM) 保持原样 */
+    void WriteIniText(string iniPath, string text)
+    {
+        ReadIniText(iniPath, out var enc);
+        File.WriteAllText(iniPath, text, enc);
+    }
+
     /* 从 客户端补丁.zip 提取模板文件内容 (不存在返回 null) */
     string ExtractPatchZipEntry(string entry)
     {
@@ -431,8 +478,11 @@ public partial class MainForm : AntdUI.Window
         }
         tbl.SuspendLayout();
         // 释放旧行控件（保留受管开关复用），避免多次刷新产生内存垃圾
-        foreach (Control c in tbl.Controls)
+        // v2.15: 倒序遍历 — 正序 foreach 中 Dispose 会把当前项移出集合,
+        // 紧随其后的控件被跳过不释放, 每次重建泄漏 GDI 句柄
+        for (int i = tbl.Controls.Count - 1; i >= 0; i--)
         {
+            var c = tbl.Controls[i];
             bool isSw = false;
             if (swDlls != null)
                 foreach (var s in swDlls)
@@ -693,7 +743,7 @@ public partial class MainForm : AntdUI.Window
         var list = new List<string>();
         var iniPath = Path.Combine(_gr, "GameGaurd.ini");
         if (!File.Exists(iniPath)) return list;
-        foreach (var raw in File.ReadAllLines(iniPath))
+        foreach (var raw in ReadIniLines(iniPath))
         {
             var t = raw.Trim();
             int eq = t.IndexOf('=');
@@ -775,7 +825,7 @@ public partial class MainForm : AntdUI.Window
             var enabled = new List<string>();
             for (int i = 0; i < DllPlugins.Length; i++)
                 if (swDlls[i].Checked) enabled.Add(DllPlugins[i].File);
-            File.WriteAllText(iniPath, BuildPatchIni(iniPath, enabled, existing), Encoding.UTF8);
+            WriteIniText(iniPath, BuildPatchIni(iniPath, enabled, existing));   // v2.15: 按原编码写回
             Lg(">>> [DLL扩展] 已挂载自定义扩展: " + file + " → GameGaurd.ini", Gn);
             RefreshDllState();
         }
@@ -801,7 +851,7 @@ public partial class MainForm : AntdUI.Window
         var iniPath = Path.Combine(_gr, "GameGaurd.ini");
         if (File.Exists(iniPath))
         {
-            foreach (var raw in File.ReadAllLines(iniPath))
+            foreach (var raw in ReadIniLines(iniPath))
             {
                 var t = raw.Trim();
                 int eq = t.IndexOf('=');
@@ -874,7 +924,7 @@ public partial class MainForm : AntdUI.Window
         var sectionComments = new List<string>();
         var plugins = new List<string>();
         bool inP = false;
-        foreach (var raw in File.ReadAllLines(iniPath))
+        foreach (var raw in ReadIniLines(iniPath))
         {
             var t = raw.Trim();
             if (t.StartsWith("["))
@@ -922,7 +972,7 @@ public partial class MainForm : AntdUI.Window
             int idx = 0;
             foreach (var v in plugins) sb.AppendLine("Plugin" + (idx++) + "=" + v);
         }
-        File.WriteAllText(iniPath, sb.ToString().TrimEnd() + "\r\n", Encoding.UTF8);
+        WriteIniText(iniPath, sb.ToString().TrimEnd() + "\r\n");   // v2.15: 按原编码写回
     }
 
     /*
@@ -981,7 +1031,7 @@ public partial class MainForm : AntdUI.Window
         try
         {
             var iniPath = Path.Combine(_gr, "GameGaurd.ini");
-            File.WriteAllText(iniPath, BuildPatchIni(iniPath, enabled, customOn), Encoding.UTF8);
+            WriteIniText(iniPath, BuildPatchIni(iniPath, enabled, customOn));   // v2.15: 按原编码写回
             Lg(">>> [DLL扩展] 已直写 GameGaurd.ini: 受管插件 " + enabled.Count + " 个, 自定义扩展 " + customOn.Count + " 个", Gn);
             if (lbDllSt != null)
                 lbDllSt.Text = "已应用：受管插件 " + enabled.Count + " · 自定义扩展 " + customOn.Count + "（直写 GameGaurd.ini）";
@@ -1041,7 +1091,9 @@ public partial class MainForm : AntdUI.Window
         }
 
         // 2) 复制全部补丁文件到游戏根目录（跳过 GameGaurd.ini, 由合并逻辑单独写入）
+        // v2.15: 记录失败清单 — 旧逻辑失败只记日志仍弹"安装成功", 用户无从得知补丁残缺
         int copied = 0;
+        var failed = new List<string>();
         foreach (var f in Directory.GetFiles(tmp, "*", SearchOption.AllDirectories))
         {
             var rel = Compat.GetRelativePath(tmp, f);
@@ -1061,6 +1113,7 @@ public partial class MainForm : AntdUI.Window
             }
             catch (Exception ex)
             {
+                failed.Add(rel);
                 Lg(">>> [新DLL安装] 复制补丁文件失败: " + rel + " - " + ex.Message, Or);
             }
         }
@@ -1071,16 +1124,33 @@ public partial class MainForm : AntdUI.Window
             var iniPath = Path.Combine(_gr, "GameGaurd.ini");
             // 合并保留现有非受管条目（玩家自定义扩展 / S4A21MemOpt.dll 等不因安装而丢失）
             var keepCustom = GetNonManagedPlugins();
-            File.WriteAllText(iniPath, BuildPatchIni(iniPath, enabled, keepCustom), Encoding.UTF8);
-            Lg(">>> [新DLL安装] 客户端补丁已安装: 复制 " + copied + " 个文件, 启用插件 "
-                + enabled.Count + " 个 → GameGaurd.ini", Gn);
-            MessageBox.Show(
-                "客户端补丁已安装到游戏根目录：\n"
-                + "复制 " + copied + " 个文件，[Plugins] 列表启用 " + enabled.Count + " 个插件。\n\n"
-                + "之后可在【DLL扩展】页直接管理插件列表（勾选/添加/删除扩展并应用，只更新 GameGaurd.ini）。",
-                "新DLL安装", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            _patchInstalled = true;   // 安装成功 → 本页立即恢复显示插件列表
+            WriteIniText(iniPath, BuildPatchIni(iniPath, enabled, keepCustom));   // v2.15: 按原编码写回
+            _patchInstalled = true;   // 列表已写入 → 本页恢复显示插件列表
             RefreshDllState();
+
+            if (failed.Count > 0)
+            {
+                // v2.15: 有文件复制失败 → 明确警告, 不再假报成功
+                var names = string.Join("\n", failed.Take(8).Select(x => "  · " + x));
+                if (failed.Count > 8) names += "\n  · …等共 " + failed.Count + " 个";
+                Lg(">>> [新DLL安装] 有 " + failed.Count + " 个补丁文件未安装成功（可能被游戏占用）", Rd);
+                MessageBox.Show(
+                    "客户端补丁【安装不完整】：\n"
+                    + "成功复制 " + copied + " 个文件，失败 " + failed.Count + " 个（文件可能正被游戏占用或权限不足）：\n\n"
+                    + names + "\n\n"
+                    + "请完全关闭游戏客户端后重新点击【新DLL安装】，否则补丁可能无法生效。",
+                    "新DLL安装 - 部分失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            else
+            {
+                Lg(">>> [新DLL安装] 客户端补丁已安装: 复制 " + copied + " 个文件, 启用插件 "
+                    + enabled.Count + " 个 → GameGaurd.ini", Gn);
+                MessageBox.Show(
+                    "客户端补丁已安装到游戏根目录：\n"
+                    + "复制 " + copied + " 个文件，[Plugins] 列表启用 " + enabled.Count + " 个插件。\n\n"
+                    + "之后可在【DLL扩展】页直接管理插件列表（勾选/添加/删除扩展并应用，只更新 GameGaurd.ini）。",
+                    "新DLL安装", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
         catch (Exception ex)
         {
@@ -1107,7 +1177,7 @@ public partial class MainForm : AntdUI.Window
 
         if (File.Exists(iniPath))
         {
-            foreach (var raw in File.ReadAllLines(iniPath))
+            foreach (var raw in ReadIniLines(iniPath))
             {
                 var t = raw.Trim();
                 if (t.StartsWith("["))

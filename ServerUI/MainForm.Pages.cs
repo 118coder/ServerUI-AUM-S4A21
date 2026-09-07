@@ -389,6 +389,7 @@ public partial class MainForm : AntdUI.Window
             CreateNoWindow = true
         };
         psi.Environment["DFO_GM_SERVER_BIN"] = sb;
+        psi.Environment["DOTNET_EnableCET"] = "0";   // v2.15: CET 规避（与更新/服务端链路一致）
         Process.Start(psi);
         Lg("GM工具已启动 -- 服务端目录: " + sb, Gn);
 

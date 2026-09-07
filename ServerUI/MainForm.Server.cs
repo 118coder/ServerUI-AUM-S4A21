@@ -609,15 +609,27 @@ public partial class MainForm : AntdUI.Window
         if (srcDir != null)
         {
             int copied = 0;
-            foreach (var fn in files)
+            try
             {
-                var src = Path.Combine(srcDir, fn);
-                var dst = Path.Combine(_gr, fn);
-                if (File.Exists(src))
+                foreach (var fn in files)
                 {
-                    File.Copy(src, dst, true);
-                    copied++;
+                    var src = Path.Combine(srcDir, fn);
+                    var dst = Path.Combine(_gr, fn);
+                    if (File.Exists(src))
+                    {
+                        File.Copy(src, dst, true);
+                        copied++;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                // v2.15: 游戏客户端运行中时 D3D9.dll 等被进程锁定, 复制会抛 IOException
+                // (旧代码无捕获, 直接弹全局"程序发生错误"误导性崩溃框)
+                Lg(">>> DX补丁复制失败: " + ex.Message, Rd);
+                MessageBox.Show("DX补丁复制失败：文件可能正被游戏占用。\n\n请完全关闭游戏客户端后重试。\n\n"
+                    + ex.Message, "DX补丁", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
             Lg("DX补丁已复制到游戏目录" + tag + " (" + copied + " 个文件)", Gn);
         }
@@ -749,7 +761,7 @@ public partial class MainForm : AntdUI.Window
                 + "。将自动重试并改用源码包同步；建议开启科学上网（梯子）提高成功率。", Or);
         }
 
-        _ = ValidateMirrorTokens();
+        _mirrorTask = ValidateMirrorTokens();
         Lg(">>> 更新前检测镜像源: Gitee / GitHub / Codeberg ...", Color.CornflowerBlue);
         try
         {
@@ -844,12 +856,8 @@ public partial class MainForm : AntdUI.Window
 
         Lg("[AUM更新] 开始自动下载源码并编译...", Color.CornflowerBlue);
 
-        _au.OutputReceived += Lg;
-        _au.Completed += (ok) =>
-        {
-            if (ok) Lg("[AUM更新] 编译成功，即将自动重启...", Gn);
-            else Lg("[AUM更新] 更新流程中断，可稍后重试。", Or);
-        };
+        // v2.15: Completed 回调已移至构造函数订阅一次
+        // (旧逻辑每次进入都 += 新 lambda, 多次更新后回调重复执行)
 
         try
         {
@@ -866,13 +874,16 @@ public partial class MainForm : AntdUI.Window
 
     async System.Threading.Tasks.Task TryMirrorUpload()
     {
+        await System.Threading.Tasks.Task.Delay(5000);
+        // v2.15: 等待令牌校验完成 — 旧逻辑校验"发射后不管", GitHub API 慢于 5 秒时
+        // _mirrorOk 还是默认 false, 令牌明明有效却被误判为"令牌无法生效"而跳过上传
+        if (_mirrorTask != null) { try { await _mirrorTask; } catch { } }
         if (!_mirrorOk)
         {
             Lg("[镜像] API令牌无法生效，请更新AUM版本。", Rd);
             return;
         }
 
-        await System.Threading.Tasks.Task.Delay(5000);
         if (await _mu.CanReachGitGud())
         {
             Lg("[镜像] 检测到可访问 GitGud，尝试同步镜像...", Color.FromArgb(176, 176, 184));
@@ -937,17 +948,17 @@ public partial class MainForm : AntdUI.Window
         }
         else if (!bat && dfo)
         {
-            stText = "● 未运行";
-            stColor = Rd;
+            // v2.15: 不再自动清理 — bat 句柄未持有只说明服务端不是本会话经 UI 启动的
+            // (手动双击 start-server.bat / 上次会话遗留), 旧逻辑会把它当"残留进程"强杀,
+            // 误伤手动开服的用户。现在如实显示状态并提示, 停止/重启仍可正常操作
+            // (Stop() 按进程路径定位 DfoServer, 不依赖 bat 句柄)。
+            stText = "● 运行中(外部)";
+            stColor = Or;
             if (!_orphanLogged)
             {
                 _orphanLogged = true;
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    Lg(">>> 检测到DfoServer残留进程,"
-                        + " 正在自动清理...", Or);
-                    ServerService.CleanOrphans();
-                });
+                Lg(">>> 检测到服务端进程正在运行 (可能为手动启动或上次会话遗留)，管理器不会自动清理。", Or);
+                Lg("    如需停止请点击【停止服务端】；执行存档操作前请先停止服务端。", Or);
             }
         }
         else
@@ -955,6 +966,21 @@ public partial class MainForm : AntdUI.Window
             stText = "● 未运行";
             stColor = Rd;
             _orphanLogged = false;
+        }
+
+        // v2.15: 服务端启动后短时间内意外退出 → 给出可操作的排查提示
+        // (典型: 杀毒查杀 DfoServer / 残留进程占用端口 / CET 兼容问题)
+        if (!_startFailLogged && !_sv.IsBatRunning
+            && _sv.StartedAtUtc != null && _sv.UnexpectedExitUtc != null
+            && (DateTime.UtcNow - _sv.StartedAtUtc.Value).TotalSeconds < 120
+            && (DateTime.UtcNow - _sv.UnexpectedExitUtc.Value).TotalSeconds < 120)
+        {
+            _startFailLogged = true;
+            Lg(">>> [服务端] 启动后短时间内退出（退出代码 " + _sv.LastExitCode + "）。常见原因与对策：", Rd);
+            Lg("    1) 杀毒软件拦截 DfoServer.exe → 将游戏目录加入杀软白名单", Rd);
+            Lg("    2) 端口被残留进程占用 → 管理器已在启动前自动清理残留，仍失败请重启电脑", Rd);
+            Lg("    3) CET 兼容问题 → 启动链路已自动注入 DOTNET_EnableCET=0，仍失败请看【疑难杂症解惑】页", Rd);
+            Lg("    4) DfoServer.exe 缺失（未完成更新）→ 先执行一次【开始更新】", Rd);
         }
 
         lbSt.Text = stText;
@@ -1018,50 +1044,73 @@ public partial class MainForm : AntdUI.Window
      * 从切换库加载所有存档文件夹，按修改时间排序 (正序/倒序由 _sa 控制)
      */
     /*
+     * 服务端是否存活 (v2.15) — bat 句柄或 DfoServer 进程任一在即视为运行中。
+     * 旧判定 (仅 _sv.IsRunning = bat且dfo) 会漏掉手动启动的服务端,
+     * 导致更新/存档操作在服务端运行时照样执行
+     */
+    bool ServerAlive()
+    {
+        var distDir = Path.Combine(_ad, "ServerS4A21-AUM", "dist", "win-x64");
+        return _sv.IsBatRunning || ServerService.IsDfoServerRunning(distDir);
+    }
+
+    /*
      * 增量更新 (RI) — 停止服务端 → 启动进度条 → 调用 UpdateService.RunIncremental()
      */
     internal async System.Threading.Tasks.Task RI()
     {
-        // v2.034: 更新前检测残留 PS1 (无残留不弹窗)
-        // 自动安装安全DLL 已随 S4A21 版本移除（服务端/游戏已无此问题）
-        CheckLeftoverPs1Prompt();
-        if (!await CanUpdate()) return;
-        _ = TryMirrorUpload();
-        if (_sv.IsRunning)
+        // v2.15: 更新防重入 — 旧逻辑无任何互斥, 更新中再点一次会并发跑两份 update.ps1
+        if (_updateBusy)
         {
-            Lg(">>> 检测到服务端正在运行，"
-                + "正在自动停止以执行增量更新...", Color.Gold);
-            _sv.Stop();
-            System.Threading.Thread.Sleep(2000);
-            Lg(">>> 服务端已停止，开始更新", Gn);
+            Lg(">>> 已有更新任务正在进行中，本次请求已忽略。", Or);
+            MessageBox.Show("已有更新任务正在进行中，请等待其完成后再试。\n（更新耗时较长，期间请勿重复点击更新按钮）",
+                "更新进行中", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
         }
-
-        if (cbCl.Checked)
-        {
-            Lg(">>> 更新前清理冗余DB...", Gn);
-            CleanRedundantDb();
-        }
-
-        pb.Visible = true; lbPg.Visible = true;
-        pb.Value = 0; _pv = 0; _stepTarget = 5;
-        if (cbSkipLog.Checked)
-            Lg(">>> [跳过更新日志] 已启用，本次不拉取仓库提交记录", Or);
-        Lg(">>> 开始增量更新 <<<", Color.CornflowerBlue);
-        _pt.Start();
-
-        _up.OutputReceived += OU;
-        _up.Completed += OD;
+        _updateBusy = true;
         try
         {
-            await _up.RunIncremental(
-                Path.Combine(_ad, "ServerS4A21-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
+            // v2.034: 更新前检测残留 PS1 (无残留不弹窗)
+            // 自动安装安全DLL 已随 S4A21 版本移除（服务端/游戏已无此问题）
+            CheckLeftoverPs1Prompt();
+            if (!await CanUpdate()) return;
+            _ = TryMirrorUpload();
+            if (ServerAlive())
+            {
+                Lg(">>> 检测到服务端正在运行，"
+                    + "正在自动停止以执行增量更新...", Color.Gold);
+                _sv.Stop();
+                Lg(">>> 服务端已停止，开始更新", Gn);
+            }
+
+            if (cbCl.Checked)
+            {
+                Lg(">>> 更新前清理冗余DB...", Gn);
+                CleanRedundantDb();
+            }
+
+            pb.Visible = true; lbPg.Visible = true;
+            pb.Value = 0; _pv = 0; _stepTarget = 5;
+            if (cbSkipLog.Checked)
+                Lg(">>> [跳过更新日志] 已启用，本次不拉取仓库提交记录", Or);
+            Lg(">>> 开始增量更新 <<<", Color.CornflowerBlue);
+            _pt.Start();
+
+            _up.OutputReceived += OU;
+            _up.Completed += OD;
+            try
+            {
+                await _up.RunIncremental(
+                    Path.Combine(_ad, "ServerS4A21-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
+            }
+            finally
+            {
+                _up.OutputReceived -= OU;
+                _up.Completed -= OD;
+                _pt.Stop();
+            }
         }
-        finally
-        {
-            _up.OutputReceived -= OU;
-            _up.Completed -= OD;
-            _pt.Stop();
-        }
+        finally { _updateBusy = false; }
     }
 
     /*
@@ -1069,50 +1118,64 @@ public partial class MainForm : AntdUI.Window
      */
     internal     async System.Threading.Tasks.Task RF()
     {
-        // v2.034: 更新前检测残留 PS1 (无残留不弹窗)
-        // 自动安装安全DLL 已随 S4A21 版本移除（服务端/游戏已无此问题）
-        CheckLeftoverPs1Prompt();
-        if (!await CanUpdate()) return;
-        if (_sv.IsRunning)
+        // v2.15: 更新防重入
+        if (_updateBusy)
         {
-            Lg(">>> 检测到服务端正在运行，"
-                + "正在自动停止以执行全量更新...", Color.Gold);
-            _sv.Stop();
-            System.Threading.Thread.Sleep(2000);
-            Lg(">>> 服务端已停止，开始更新", Gn);
+            Lg(">>> 已有更新任务正在进行中，本次请求已忽略。", Or);
+            MessageBox.Show("已有更新任务正在进行中，请等待其完成后再试。\n（更新耗时较长，期间请勿重复点击更新按钮）",
+                "更新进行中", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
         }
-
-        if (cbCl.Checked)
-        {
-            Lg(">>> 更新前清理冗余DB...", Gn);
-            CleanRedundantDb();
-        }
-
-        pb.Visible = true; lbPg.Visible = true;
-        pb.Value = 0; _pv = 0; _stepTarget = 5;
-        if (cbSkipLog.Checked)
-            Lg(">>> [跳过更新日志] 已启用，本次不拉取仓库提交记录", Or);
-        Lg(">>> 开始全量更新 <<<", Color.CornflowerBlue);
-        _pt.Start();
-
-        _up.OutputReceived += OU;
-        _up.Completed += OD;
+        _updateBusy = true;
         try
         {
-            await _up.RunFull(
-                Path.Combine(_ad, "ServerS4A21-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
+            // v2.034: 更新前检测残留 PS1 (无残留不弹窗)
+            // 自动安装安全DLL 已随 S4A21 版本移除（服务端/游戏已无此问题）
+            CheckLeftoverPs1Prompt();
+            if (!await CanUpdate()) return;
+            if (ServerAlive())
+            {
+                Lg(">>> 检测到服务端正在运行，"
+                    + "正在自动停止以执行全量更新...", Color.Gold);
+                _sv.Stop();
+                Lg(">>> 服务端已停止，开始更新", Gn);
+            }
+
+            if (cbCl.Checked)
+            {
+                Lg(">>> 更新前清理冗余DB...", Gn);
+                CleanRedundantDb();
+            }
+
+            pb.Visible = true; lbPg.Visible = true;
+            pb.Value = 0; _pv = 0; _stepTarget = 5;
+            if (cbSkipLog.Checked)
+                Lg(">>> [跳过更新日志] 已启用，本次不拉取仓库提交记录", Or);
+            Lg(">>> 开始全量更新 <<<", Color.CornflowerBlue);
+            _pt.Start();
+
+            _up.OutputReceived += OU;
+            _up.Completed += OD;
+            try
+            {
+                await _up.RunFull(
+                    Path.Combine(_ad, "ServerS4A21-AUM"), _ad, cbSkipLog.Checked, cbMirror.Checked);
+            }
+            finally
+            {
+                _up.OutputReceived -= OU;
+                _up.Completed -= OD;
+                _pt.Stop();
+            }
         }
-        finally
-        {
-            _up.OutputReceived -= OU;
-            _up.Completed -= OD;
-            _pt.Stop();
-        }
+        finally { _updateBusy = false; }
     }
 
     /*
      * 更新输出回调 (OU) — 每收到一行 PowerShell 输出时调用
      * 处理 ##PROGRESS## 进度标记 / [FILE:CS] / [FILE:SUM] / 日期行 / [N/5] 步骤
+     * v2.15: 本回调由输出事件在线程池线程触发 — 所有 UI 控件访问封送回 UI 线程
+     * (旧代码直接写 pb/lbPg, 属跨线程访问, 偶发界面异常难以排查)
      */
     void OU(string m)
     {
@@ -1121,14 +1184,14 @@ public partial class MainForm : AntdUI.Window
             var val = m.Substring("##PROGRESS##".Length);
             if (int.TryParse(val, out var pct))
             {
-                if (pct > _stepTarget && pct <= 95)
+                BeginInvokeUi(() =>
                 {
-                    _stepTarget = pct;
+                    if (pct > _stepTarget && pct <= 95) _stepTarget = pct;
                     _pv = Math.Max(_pv, pct - 3);   // 贴近真实进度, 剩余交给蠕动
-                }
-                pb.Value = Math.Min(_pv, 95f) / 100f;
-                lbPg.Text = "更新进度: " + (int)_pv + "%";
-                ProgressHook?.Invoke((int)_pv);     // 转发到经典模式窗口
+                    pb.Value = Math.Min(_pv, 95f) / 100f;
+                    lbPg.Text = "更新进度: " + (int)_pv + "%";
+                    ProgressHook?.Invoke((int)_pv);     // 转发到经典模式窗口
+                });
             }
             return;
         }
@@ -1152,37 +1215,59 @@ public partial class MainForm : AntdUI.Window
         var sm = System.Text.RegularExpressions.Regex.Match(m, @"\[(\d)/5\]");
         if (sm.Success && int.TryParse(sm.Groups[1].Value, out var step))
         {
-            _stepTarget = step switch { 1 => 5, 2 => 25, 3 => 55, 4 => 85, 5 => 93, _ => _stepTarget };
-            if (_pv < _stepTarget - 8) _pv = _stepTarget - 8;   // 大步跳到阶段附近, 剩余交给蠕动
-            pb.Value = Math.Min(_pv, 95f) / 100f;
-            lbPg.Text = "更新进度: " + (int)_pv + "%";
-            ProgressHook?.Invoke((int)_pv);     // 转发到经典模式窗口
+            int target = step switch { 1 => 5, 2 => 25, 3 => 55, 4 => 85, 5 => 93, _ => -1 };
+            BeginInvokeUi(() =>
+            {
+                if (target >= 0) _stepTarget = target;
+                if (_pv < _stepTarget - 8) _pv = _stepTarget - 8;   // 大步跳到阶段附近, 剩余交给蠕动
+                pb.Value = Math.Min(_pv, 95f) / 100f;
+                lbPg.Text = "更新进度: " + (int)_pv + "%";
+                ProgressHook?.Invoke((int)_pv);     // 转发到经典模式窗口
+            });
         }
     }
 
     /*
      * 更新完成回调 (OD) — 进度条 100% → 显示结果 → 隐藏进度条 → 刷新
+     * v2.15: 本回调在线程池线程触发 — UI 更新封送回 UI 线程, Sleep 留在后台
      */
     void OD(bool ok)
     {
-        pb.Value = 1f;   // 100%
-        lbPg.Text = "100%";
-        ProgressHook?.Invoke(100);     // 转发到经典模式窗口
-        if (ok)
-        {
-            LS(">>> 更新完成！如果更新没有效果，"
-                + "请尝试再次点击更新或者全量更新。<<<");
-            Lg("========================================", Cy);
-            Lg("  更新已完成，将在目录【\\AUM管理组件】生成一份运行日志", Color.Gold);
-            Lg("========================================", Cy);
-        }
-        else
-            Lg(">>> 更新失败，请检查网络连接或查看上方日志。<<<",
-                Color.Orange);
-
         System.Threading.Thread.Sleep(1500);
-        pb.Visible = false;
-        lbPg.Visible = false;
-        Rf();
+        BeginInvokeUi(() =>
+        {
+            pb.Value = 1f;   // 100%
+            lbPg.Text = "100%";
+            ProgressHook?.Invoke(100);     // 转发到经典模式窗口
+            if (ok)
+            {
+                LS(">>> 更新完成！如果更新没有效果，"
+                    + "请尝试再次点击更新或者全量更新。<<<");
+                Lg("========================================", Cy);
+                Lg("  更新已完成，将在目录【\\AUM管理组件】生成一份运行日志", Color.Gold);
+                Lg("========================================", Cy);
+            }
+            else
+                Lg(">>> 更新失败，请检查网络连接或查看上方日志。<<<",
+                    Color.Orange);
+
+            pb.Visible = false;
+            lbPg.Visible = false;
+            Rf();
+        });
+    }
+
+    /*
+     * 线程安全地把动作封送到 UI 线程 (v2.15)
+     * 窗体已关闭/句柄未创建时静默丢弃, 不抛 ObjectDisposedException
+     */
+    void BeginInvokeUi(Action a)
+    {
+        try
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            BeginInvoke(a);
+        }
+        catch { }
     }
 }

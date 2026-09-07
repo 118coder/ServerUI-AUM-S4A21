@@ -26,6 +26,7 @@ public partial class MainForm : AntdUI.Window
     AntdUI.DatePicker dtpTime;             // 目标时间选择器 (时间页, AntdUI 风格)
     AntdUI.Label lbTimeNow, lbTimeSt;      // 当前时间 / 操作结果 (时间页)
     Timer _tt;                             // 时间页每秒刷新定时器
+    bool _timeSyncBusy;                    // v2.15: 网络同步防重入
 
     // ================================================================
     // ★ P2.6 调整系统时间页 ★ — 手动设置时间 / 快速调整 / 同步网络时间
@@ -222,53 +223,83 @@ public partial class MainForm : AntdUI.Window
 
     /*
      * 同步网络时间 — 本进程查询 NTP (无需管理员); 写入需提权
+     * v2.15: NTP 轮询(串行5服务器)/w32tm/提权等待全部是耗时操作, 移入后台线程执行,
+     * 断网或防火墙拦 UDP 123 时不再整窗假死 1 分钟以上 (旧实现在 UI 线程同步执行);
+     * 结果通过 BeginInvokeUi 封送回 UI 线程, 并加 _timeSyncBusy 防连点重入
      */
     void SyncNetworkTime()
     {
+        if (_timeSyncBusy)
+        {
+            Lg(">>> 网络时间同步正在进行中，请稍候。", Or);
+            return;
+        }
+        _timeSyncBusy = true;
         Lg(">>> 开始同步网络时间...", Color.CornflowerBlue);
         Cursor = Cursors.WaitCursor;
-        try
+        _ = System.Threading.Tasks.Task.Run(async () =>
         {
-            var nt = TimeTool.QueryNtp();
-            if (!nt.HasValue)
+            try
             {
-                var err2 = TimeTool.ResyncViaW32tm();
-                if (err2 == null)
+                var nt = await System.Threading.Tasks.Task.Run(() => TimeTool.QueryNtp());
+                if (!nt.HasValue)
                 {
-                    Lg(">>> 已通过 Windows 时间服务（w32tm）同步", Gn);
-                    lbTimeSt.Text = "已通过 w32tm 同步";
+                    var err2 = TimeTool.ResyncViaW32tm();
+                    BeginInvokeUi(() =>
+                    {
+                        if (err2 == null)
+                        {
+                            Lg(">>> 已通过 Windows 时间服务（w32tm）同步", Gn);
+                            lbTimeSt.Text = "已通过 w32tm 同步";
+                        }
+                        else
+                        {
+                            Lg(">>> 同步失败（无法连接时间服务器）: " + err2, Rd);
+                            lbTimeSt.Text = "同步失败：无法连接时间服务器";
+                        }
+                    });
+                    return;
                 }
-                else
-                {
-                    Lg(">>> 同步失败（无法连接时间服务器）: " + err2, Rd);
-                    lbTimeSt.Text = "同步失败：无法连接时间服务器";
-                }
-                return;
-            }
-            var netTime = nt.Value;
-            Lg(">>> 已获取网络标准时间: " + netTime.ToString("yyyy-MM-dd HH:mm:ss"), Color.CornflowerBlue);
+                var netTime = nt.Value;
+                Lg(">>> 已获取网络标准时间: " + netTime.ToString("yyyy-MM-dd HH:mm:ss"), Color.CornflowerBlue);
 
-            if (!TimeTool.IsAdmin())
-            {
-                if (TimeTool.RunElevated("--synctime"))
-                    ShowTimeArgResult("同步结果");
-                else
-                    Lg("需要管理员权限才能写入系统时间（用户取消了提权）", Rd);
-                return;
+                if (!TimeTool.IsAdmin())
+                {
+                    bool elevated = TimeTool.RunElevated("--synctime");   // 后台等待提权实例完成
+                    BeginInvokeUi(() =>
+                    {
+                        if (elevated)
+                            ShowTimeArgResult("同步结果");
+                        else
+                            Lg("需要管理员权限才能写入系统时间（用户取消了提权）", Rd);
+                    });
+                    return;
+                }
+                var err = TimeTool.SetLocalTime(netTime);
+                BeginInvokeUi(() =>
+                {
+                    if (err == null)
+                    {
+                        Lg(">>> 网络时间已同步并写入: " + netTime.ToString("yyyy-MM-dd HH:mm:ss"), Gn);
+                        lbTimeSt.Text = "已同步：" + netTime.ToString("yyyy-MM-dd HH:mm:ss");
+                    }
+                    else
+                    {
+                        Lg(">>> 写入系统时间失败: " + err, Rd);
+                        lbTimeSt.Text = "同步失败：" + err;
+                    }
+                });
             }
-            var err = TimeTool.SetLocalTime(netTime);
-            if (err == null)
+            catch (Exception ex)
             {
-                Lg(">>> 网络时间已同步并写入: " + netTime.ToString("yyyy-MM-dd HH:mm:ss"), Gn);
-                lbTimeSt.Text = "已同步：" + netTime.ToString("yyyy-MM-dd HH:mm:ss");
+                Lg(">>> 同步网络时间异常: " + ex.Message, Rd);
             }
-            else
+            finally
             {
-                Lg(">>> 写入系统时间失败: " + err, Rd);
-                lbTimeSt.Text = "同步失败：" + err;
+                BeginInvokeUi(() => Cursor = Cursors.Default);
+                _timeSyncBusy = false;
             }
-        }
-        finally { Cursor = Cursors.Default; }
+        });
     }
 
     /*
