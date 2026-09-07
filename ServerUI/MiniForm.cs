@@ -273,10 +273,23 @@ public partial class MiniForm : AntdUI.Window
             if (!CheckServer()) return;
             var n = Interaction.InputBox("名称:", "储存当前存档",
                 DateTime.Now.ToString("MMdd_HHmm"));
-            if (!string.IsNullOrWhiteSpace(n))
+            if (string.IsNullOrWhiteSpace(n)) return;
+            if (n.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                MessageBox.Show("存档名称包含不允许的字符（\\ / : * ? \" < > | 等），请换个名称。",
+                    "储存当前存档", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            try
             {
                 _main._ar.SaveArchive(_main._ad, n);
+                _main.Lg(">>> 极简模式: 已储存到切换库 " + n, Gn);
                 RefreshArchives();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("储存失败：" + ex.Message + "\n\n请确认服务端已停止后再试。",
+                    "储存当前存档", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         };
         btUndo = new AntdUI.Button
@@ -293,15 +306,24 @@ public partial class MiniForm : AntdUI.Window
         btUndo.Click += (s, e) =>
         {
             if (!CheckServer()) return;
-            if (!_main._ar.UndoSwap(_main._ad))
+            try
             {
-                MessageBox.Show("没有可用的备份", "撤销换挡",
+                if (!_main._ar.UndoSwap(_main._ad))
+                {
+                    MessageBox.Show("没有可用的备份", "撤销换挡",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                _main.TB();   // v2.15: 与主界面/经典模式一致, 撤销后修剪旧备份
+                MessageBox.Show("已从最近一次备份恢复", "撤销换挡",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                RefreshArchives();
             }
-            MessageBox.Show("已从最近一次备份恢复", "撤销换挡",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            RefreshArchives();
+            catch (Exception ex)
+            {
+                MessageBox.Show("撤销换挡失败：" + ex.Message, "撤销换挡",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         };
         btRefresh = new AntdUI.Button
         {
@@ -419,39 +441,54 @@ public partial class MiniForm : AntdUI.Window
         if (string.IsNullOrEmpty(nm)) return;
 
         var path = Path.Combine(_main._ad, "存档管理", "切换库", nm);
-        if (Directory.GetFiles(path, "*.db").Length == 0)
+        try
         {
-            MessageBox.Show("该存档没有 .db 文件", "切换存档",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
+            if (!Directory.Exists(path) || Directory.GetFiles(path, "*.db").Length == 0)
+            {
+                MessageBox.Show("该存档没有 .db 文件", "切换存档",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                RefreshArchives();
+                return;
+            }
 
-        if (_main._ar.IsSimpleArchive(_main._ad, path))
-        {
-            var r = MessageBox.Show(
-                "该存档文件夹内仅有一个.DB的主存档文件，是否执行一次对主目录的冗杂DB清理？",
-                "存档切换",
-                MessageBoxButtons.YesNoCancel,
-                MessageBoxIcon.Question);
-            if (r == DialogResult.Cancel) return;
-            _main._ar.SwitchToArchive(_main._ad, path,
-                cleanRedundantDbFirst: r == DialogResult.Yes);
-        }
-        else
-        {
-            _main._ar.SwitchToArchive(_main._ad, path);
-        }
+            if (_main._ar.IsSimpleArchive(_main._ad, path))
+            {
+                var r = MessageBox.Show(
+                    "该存档文件夹内仅有一个.DB的主存档文件，是否执行一次对主目录的冗杂DB清理？",
+                    "存档切换",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question);
+                if (r == DialogResult.Cancel) return;
+                _main._ar.SwitchToArchive(_main._ad, path,
+                    cleanRedundantDbFirst: r == DialogResult.Yes);
+            }
+            else
+            {
+                _main._ar.SwitchToArchive(_main._ad, path);
+            }
 
-        _main.Lg(">>> 极简模式: 已切换到存档 " + nm, Gn);
-        RefreshArchives();
+            _main.Lg(">>> 极简模式: 已切换到存档 " + nm, Gn);
+            // v2.15: 与主界面/经典模式一致 — 切换后修剪旧备份,
+            // 旧逻辑漏掉 TB() 导致极简模式反复切换时备份目录无限膨胀
+            _main.TB();
+            RefreshArchives();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("切换存档失败：" + ex.Message, "切换存档",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            RefreshArchives();
+        }
     }
 
     /*
      * 存档操作前置检查 — 服务端运行中阻止
+     * v2.15: 补充 DfoServer 进程检测 — 手动启动的服务端 (bat 句柄未持有) 同样拦截
      */
     bool CheckServer()
     {
-        if (_main._sv.IsRunning)
+        var distDir = Path.Combine(_main._ad, "ServerS4A21-AUM", "dist", "win-x64");
+        if (_main._sv.IsRunning || ServerService.IsDfoServerRunning(distDir))
         {
             MessageBox.Show(
                 "目前服务端正在运行，请结束服务端后再使用存档管理相关功能。",

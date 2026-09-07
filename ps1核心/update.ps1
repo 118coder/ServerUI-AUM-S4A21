@@ -40,6 +40,14 @@
 # -SkipCommitLog    : 跳过提交日志拉取（GUI中有【跳过更新日志】复选框对应）
 param([switch]$FullSync, [switch]$NonInteractive, [switch]$SkipCommitLog, [switch]$UseMirror)
 
+# v2.15: CET 规避 — 部分 CPU/Win11 24H2 组合下 CET 栈保护会使 dotnet 编译/启动失败,
+# 此处统一为编译子进程注入关闭开关 (GUI 启动的 powershell 子进程已有同等注入)
+$env:DOTNET_EnableCET = "0"
+# v2.15: 全局关闭进度渲染 — Invoke-WebRequest 的进度条会造成
+#   1) "正在读取 Web 响应..." 噪音  2) 中文宽字符显示重叠  3) 下载显著变慢
+#   (L1093 处的局部设置只覆盖并行下载块, 这里做脚本级兜底)
+$ProgressPreference = "SilentlyContinue"
+
 # ---- 全局设置 ----
 # 出错时继续运行，不要因为一个小错误就中断整个更新
 # 如果想"一有错误就停止"，改成 "Stop" 即可
@@ -222,13 +230,13 @@ function Download-FromGitee($url, $target, $timeout = 30) {
         if ($contentB64) {
             $bytes = [Convert]::FromBase64String($contentB64)
             [IO.File]::WriteAllBytes($target, $bytes)
-            # v1.921: 下载后立即做 ZIP 完整性校验, 截断文件视为失败
-            return (Test-Path $target) -and ((Get-Item $target).Length -gt 0) -and (Test-ZipIntegrity $target)
+            # v2.15: 下载结果判定按文件类型区分 (.zip 才做 ZIP 校验, 文本只要求非空)
+            return (Test-DownloadOk $target)
         }
         # 大文件无 content 字段，使用 download_url
         if ($meta.download_url) {
             Invoke-WebRequest -Uri $meta.download_url -OutFile $target -UseBasicParsing -TimeoutSec $timeout
-            return (Test-Path $target) -and ((Get-Item $target).Length -gt 0) -and (Test-ZipIntegrity $target)
+            return (Test-DownloadOk $target)
         }
         return $false
     } catch { return $false }
@@ -245,16 +253,18 @@ function Download-FromGitHub($repoPath, $target, $timeout = 30) {
         $headers = @{"Authorization" = "token $ghToken"; "Accept" = "application/vnd.github.v3+json"}
         $resp = Invoke-WebRequest -Uri $apiUrl -Headers $headers -UseBasicParsing -TimeoutSec $timeout
         $meta = $resp.Content | ConvertFrom-Json
-        if ($meta.download_url) {
-            Invoke-WebRequest -Uri $meta.download_url -OutFile $target -UseBasicParsing -TimeoutSec $timeout
-            # v1.921: 下载后立即做 ZIP 完整性校验, 截断文件视为失败
-            return (Test-Path $target) -and ((Get-Item $target).Length -gt 0) -and (Test-ZipIntegrity $target)
-        }
-        # 小文件可能直接返回 content
+        # v2.15 修复: 私有仓库的 download_url 是裸 raw 直链, 匿名访问必 404
+        # (旧逻辑先走 download_url 且不带认证 → GitHub 镜像腿对大/小文件全部失败);
+        # 改为: 优先用 API 返回的 content (base64) 直接解码,
+        #       大文件无 content 时给 raw 直链补上 Authorization 头再下载
         if ($meta.content) {
             $bytes = [Convert]::FromBase64String($meta.content.Replace("`n","").Replace("`r",""))
             [IO.File]::WriteAllBytes($target, $bytes)
-            return (Test-Path $target) -and ((Get-Item $target).Length -gt 0) -and (Test-ZipIntegrity $target)
+            return (Test-DownloadOk $target)
+        }
+        if ($meta.download_url) {
+            Invoke-WebRequest -Uri $meta.download_url -OutFile $target -UseBasicParsing -TimeoutSec $timeout -Headers @{"Authorization" = "token $ghToken"}
+            return (Test-DownloadOk $target)
         }
         return $false
     } catch { return $false }
@@ -313,6 +323,17 @@ function Test-ZipIntegrity($path) {
             return $false
         } finally { $fs.Dispose() }
     } catch { return $false }
+}
+
+# ---- 下载结果判定 (v2.15) ----
+# .zip → 存在 + 非空 + ZIP 完整性校验; 其他文件(更新日志.txt 等文本) → 存在 + 非空即可
+# 修复: 旧逻辑对所有下载文件都跑 Test-ZipIntegrity, .txt 不是 ZIP 恒判失败,
+#       导致镜像更新日志回退链的 Gitee/GitHub 两级"下载成功却返回失败", 只剩 Codeberg 可用
+function Test-DownloadOk($target) {
+    if (-not (Test-Path $target)) { return $false }
+    if ((Get-Item $target).Length -le 0) { return $false }
+    if ($target.ToLower().EndsWith(".zip")) { return (Test-ZipIntegrity $target) }
+    return $true
 }
 
 # ---- ZIP 内容级校验 (v1.921, CRC 自校验) ----
@@ -570,16 +591,17 @@ function Sync-CommitHistory {
     # ================================================================
     try {
         $r1 = $null
-        # 第 1 页最多重试 10 次（因为这是关键的第一步，失败了后面都没意义）
-        for ($a = 1; $a -le 10; $a++) {
+        # 第 1 页最多重试 3 次 — v2.15: 10 次重试在断网时要卡约 2 分钟才进入缓存/镜像回退,
+        # 现在快速失败后由缓存与镜像兜底, 整体体验更顺
+        for ($a = 1; $a -le 3; $a++) {
             try {
                 $r1 = Invoke-WebRequest -Uri ($uriBase + "1") -UseBasicParsing -TimeoutSec 10 -Headers $ApiHeaders
                 break
             } catch {
-                if ($a -lt 10) { Start-Sleep 3 }   # 等 3 秒再重试
+                if ($a -lt 3) { Start-Sleep 3 }   # 等 3 秒再重试
             }
         }
-        if (-not $r1) { throw "第1页拉取失败 (10次重试后)" }
+        if (-not $r1) { throw "第1页拉取失败 (3次重试后)" }
 
         # 将 API 返回的 JSON 转成对象数组
         $items = $utf8.GetString($r1.RawContentStream.ToArray()) | ConvertFrom-Json
@@ -1129,7 +1151,9 @@ try {
     } elseif ($sourceAvailability.GitHub) {
         Write-Host "[连接检测] GitGud/Gitee 不可达，GitHub 可达 → 使用 GitHub 镜像下载。"
         Write-Host "[提示] 如镜像下载失败，请打开页面确认: $MirrorGitHubPage"
-        $svrPrimaryUrl = $MirrorServerUrls[1]
+        # v2.15: 私有仓库 raw 直链匿名必 404 → 与 Gitee 同款改走 API (Download-FromGitHub)
+        $svrFromGitHub = $true
+        $svrPrimaryUrl = "mirrors/ServerS4A21-latest.zip"
         $svrSourceName = "GitHub"
     } elseif ($sourceAvailability.Codeberg) {
         Write-Host "[连接检测] GitGud/Gitee/GitHub 不可达，Codeberg 可达 → 使用 Codeberg 镜像下载。"
@@ -1154,6 +1178,7 @@ try {
     # v1.914: 普通用户直接按序尝试全部镜像，不做预检
     $svrPS = $null; $svrHandle = $null; $svrOk = $false; $svrSize = "N/A"
     $svrFromGitee = $false
+    $svrFromGitHub = $false
     if ($svrTryAllMirrors) {
         # 普通用户：按序尝试 Gitee API → GitHub API → Codeberg Raw → 本地缓存
         # 每个源独立短超时，不浪费总时间
@@ -1397,6 +1422,17 @@ try {
             Write-Host "Server download: OK ($svrSize) [Gitee API]"
         } else {
             Write-Host "Server download: FAILED (Gitee API)"
+        }
+    }
+    if ($svrFromGitHub) {
+        # v2.15: GitHub 私有仓库走 API 下载 (raw 直链匿名必 404)
+        Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
+        if (Download-FromGitHub $svrPrimaryUrl $TempZip 30) {
+            $svrOk = $true
+            $svrSize = "$([math]::Round((Get-Item $TempZip).Length/1KB)) KB"
+            Write-Host "Server download: OK ($svrSize) [GitHub API]"
+        } else {
+            Write-Host "Server download: FAILED (GitHub API)"
         }
     }
 
@@ -2084,7 +2120,8 @@ try {
                     $message = $message.Substring(0, 117) + "..."
                 }
                 if (-not $allGrouped.Contains($d)) { $allGrouped[$d] = @() }
-                $allGrouped[$d] += $message
+                # v2.15: 同一日期内按消息去重 (镜像写回的缓存条目与真实提交可能同文)
+                if ($allGrouped[$d] -notcontains $message) { $allGrouped[$d] += $message }
             } catch { }
         }
 
@@ -2101,17 +2138,17 @@ try {
                 # 逐页循环拉取
                 while ($true) {
                     $resp = $null
-                    # 每页最多重试 10 次
-                    for ($a = 1; $a -le 10; $a++) {
+                    # 每页最多重试 3 次 (v2.15: 由 10 次缩短, 断网时不再长时间卡住)
+                    for ($a = 1; $a -le 3; $a++) {
                         try {
                             $resp = Invoke-WebRequest -Uri "$RepoApi/repository/commits?ref_name=master&per_page=$perPage&page=$page&since=$fbSince" -Headers $ApiHeaders -UseBasicParsing -TimeoutSec 15
                             break
                         } catch {
-                            if ($a -lt 10) { Start-Sleep 1 }
+                            if ($a -lt 3) { Start-Sleep 1 }
                         }
                     }
                     if (-not $resp) {
-                        throw "兜底拉取第${page}页失败 (10次重试后)"
+                        throw "兜底拉取第${page}页失败 (3次重试后)"
                     }
 
                     # 解析 JSON 响应
@@ -2128,7 +2165,8 @@ try {
                         $t = $msg.Split("`n")[0].Trim()
                         if ($t.Length -gt 120) { $t = $t.Substring(0,117) + "..." }
                         if (-not $allGrouped.Contains($d)) { $allGrouped[$d] = @() }
-                        $allGrouped[$d] += $t
+                        # v2.15: 同一日期内按消息去重
+                        if ($allGrouped[$d] -notcontains $t) { $allGrouped[$d] += $t }
                     }
 
                     if ($list.Count -lt $perPage) { break }   # 最后一页
@@ -2142,21 +2180,24 @@ try {
         # v1.911: GitGud API 无数据 → 从镜像下载缓存日志
         # v1.918: 镜像日志只作为"提交历史补充数据源"，不再整文件覆盖本地日志 —
         #         最终日志仍由本次生成（版本头=本次日期），镜像提交段并入 $allGrouped 去重
+        # v2.15: S4A21 日志统一用 mirrors/S4A21更新日志.txt (旧 更新日志.txt 属于已停维护的 S4A12,
+        #        不再作为 S4A21 的数据源); 拉取顺序仍为 Gitee(API) → GitHub(API) → Codeberg(raw)
         if ($allGrouped.Count -eq 0) {
             Write-Host "[提交日志] GitGud API 无数据，从镜像下载缓存日志作为补充..."
             $mirrorLog = Join-Path $env:TEMP "mirror-log.txt"
             Remove-Item $mirrorLog -Force -ErrorAction SilentlyContinue
             $logOk = $false
-            # 按优先级尝试: Gitee(API) → GitHub(API) → Codeberg(raw)
+            $s21logUrl = "mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt"
+            # 按优先级尝试: Gitee(API, 国内直连优先) → GitHub(API) → Codeberg(raw)
             if (-not $logOk) {
-                try { $logOk = Download-FromGitee "$MirrorGiteeRaw/mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt" $mirrorLog 15 } catch {}
+                try { $logOk = Download-FromGitee "$MirrorGiteeRaw/$s21logUrl" $mirrorLog 15 } catch {}
             }
             if (-not $logOk) {
-                try { $logOk = Download-FromGitHub "mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt" $mirrorLog 15 } catch {}
+                try { $logOk = Download-FromGitHub "$s21logUrl" $mirrorLog 15 } catch {}
             }
             if (-not $logOk) {
                 try {
-                    Invoke-WebRequest -Uri "$MirrorCodebergRaw/mirrors/%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt" -OutFile $mirrorLog -UseBasicParsing -TimeoutSec 15
+                    Invoke-WebRequest -Uri "$MirrorCodebergRaw/$s21logUrl" -OutFile $mirrorLog -UseBasicParsing -TimeoutSec 15
                     $logOk = (Test-Path $mirrorLog) -and ((Get-Item $mirrorLog).Length -gt 0)
                 } catch {}
             }
@@ -2179,6 +2220,37 @@ try {
                     }
                 }
                 Write-Host "[提交日志] 镜像日志并入完成（共 $($allGrouped.Count) 个日期分组）。"
+
+                # v2.15: 镜像提交写回本地提交缓存 — 此前镜像数据只在本次生效,
+                # gitgud 持续不可达时每次都从旧缓存重新开始, 历史永远停在缓存最后刷新日;
+                # 写回后下次更新直接基于缓存继续累积, 日志历史不再冻结
+                try {
+                    $cachedOld = @(Read-CommitCache)
+                    $seen = @{}
+                    $mergedCache = New-Object System.Collections.Generic.List[object]
+                    foreach ($cc in $cachedOld) {
+                        $k = "$($cc.Date)|$($cc.Message)"
+                        if (-not $seen.ContainsKey($k)) { $seen[$k] = $true; $mergedCache.Add($cc) }
+                    }
+                    $addedN = 0
+                    foreach ($dKey in @($allGrouped.Keys)) {
+                        foreach ($msg in @($allGrouped[$dKey])) {
+                            $k = "$dKey|$msg"
+                            if ($seen.ContainsKey($k)) { continue }
+                            $seen[$k] = $true
+                            $mergedCache.Add([pscustomobject]@{
+                                Sha     = ("mirror-" + $dKey + "-" + $addedN)
+                                Date    = ($dKey + "T12:00:00Z")
+                                Message = $msg
+                            })
+                            $addedN++
+                        }
+                    }
+                    if ($addedN -gt 0) {
+                        Write-CommitCache @($mergedCache.ToArray())
+                        Write-Host "[提交日志] 镜像提交已写回本地缓存 ($addedN 条新增)。"
+                    }
+                } catch { }
             }
             Remove-Item $mirrorLog -Force -ErrorAction SilentlyContinue
         }
@@ -2240,9 +2312,14 @@ try {
     [void]$logLines.Add("")
 
     # 写入文件（UTF-8 with BOM，确保记事本能正确识别中文）
-    $logText = ($logLines -join "`r`n") + "`r`n"
-    [System.IO.File]::WriteAllText($LogFile, $logText, (New-Object System.Text.UTF8Encoding $true))
-    Write-Host "[提交日志] 已输出 更新日志.txt ($totalCommits 条提交)"
+    # v2.15: 主源+缓存+镜像全部拿不到数据时保留现有日志, 不再用"0条提交的空壳日志"覆盖历史
+    if ($allGrouped.Count -eq 0 -and (Test-Path $LogFile)) {
+        Write-Host "[提交日志] 未获取到任何提交数据且本地已有更新日志 → 保留现有日志不覆盖。"
+    } else {
+        $logText = ($logLines -join "`r`n") + "`r`n"
+        [System.IO.File]::WriteAllText($LogFile, $logText, (New-Object System.Text.UTF8Encoding $true))
+        Write-Host "[提交日志] 已输出 更新日志.txt ($totalCommits 条提交)"
+    }
 
     # ================================================================
     #  控制台输出最近的更新记录（最近 7 天）

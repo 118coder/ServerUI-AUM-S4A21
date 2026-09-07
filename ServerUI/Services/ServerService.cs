@@ -92,6 +92,17 @@ public class ServerService
     // 通过这个句柄可以检测进程是否存活、杀进程、获取窗口句柄
     private Process _batProcess;
 
+    // ===== 启动诊断 (v2.15) =====
+    // 记录最近一次启动/意外退出信息, 供 UI 在服务端"启动即断联"时给出排查提示
+    public DateTime? StartedAtUtc { get; private set; }
+    public DateTime? UnexpectedExitUtc { get; private set; }
+    public int LastExitCode { get; private set; } = -1;
+
+    // 服务端启动/异常退出通知 (MainForm 订阅后写入运行日志)
+    public event Action<string> NoticeReceived;
+
+    private void Notify(string msg) { try { NoticeReceived?.Invoke(msg); } catch { } }
+
     /*
      * 检测 bat 进程是否存活
      * 
@@ -198,6 +209,16 @@ public class ServerService
         var bat = Path.Combine(baseDir, "start-server.bat");
         if (!File.Exists(bat)) return;  // 脚本不存在（可能是首次使用，需要先更新）
 
+        // v2.15: 启动前清理残留的 DfoServer — 上次异常退出留下的孤儿进程会占住端口,
+        // 新服务端绑定端口失败 → "启动即断联"。用户点开始游戏/重启 = 明确要全新启动
+        var distDir = GetDistDir();
+        if (IsDfoServerRunning(distDir))
+        {
+            Notify("[服务端] 检测到残留的服务端进程，正在清理后重新启动...");
+            CleanOrphans();
+            System.Threading.Thread.Sleep(1000);
+        }
+
         // 【v2.1-3 修复】服务端由 AUM 启动会闪退（手动启动正常）
         // 根因（双重）:
         //   1. 权限: app.manifest 为 asInvoker —— 普通启动时 AUM 与子进程均为非管理员,
@@ -222,12 +243,23 @@ public class ServerService
             },
             EnableRaisingEvents = true
         };
+        // v2.15: CET 规避 — 部分旧 CPU/Win11 24H2 组合下 CET 栈保护会让 .NET 程序
+        // (DfoServer.exe) 启动即崩。环境变量随 bat 进程树传入 DfoServer,
+        // 与更新链路 (UpdateService/SelfUpdateService) 已有的注入保持一致
+        _batProcess.StartInfo.EnvironmentVariables["DOTNET_EnableCET"] = "0";
+
+        // 启动诊断计时 (配合 UnexpectedExitUtc 供 UI 提示"启动即断联")
+        StartedAtUtc = DateTime.UtcNow;
+        UnexpectedExitUtc = null;
 
         // bat 进程退出时的处理
         // 场景: 用户手动关闭了 cmd 窗口，或 DfoServer 崩溃导致 bat 退出
         // 此时需要清理可能残留的 DfoServer 孤儿进程
         _batProcess.Exited += (s, e) =>
         {
+            // v2.15: 记录退出代码 — 启动后短时间内退出时 UI 据此给出排查提示
+            try { LastExitCode = _batProcess?.ExitCode ?? -1; } catch { }
+            UnexpectedExitUtc = DateTime.UtcNow;
             CleanOrphans();
             try { _batProcess?.Dispose(); } catch { }
             _batProcess = null;
@@ -262,12 +294,15 @@ public class ServerService
     }
 
     /*
-     * 停止服务端 (v2.031 优雅停服)
+     * 停止服务端 (v2.031 优雅停服 / v2.15 修复竞态)
      *
      * 执行步骤（先优雅、后兜底）:
      *   1. 向 DfoServer.exe 控制台输入缓冲区写入 'q' 按键
      *      → DfoServer 自行保存数据并退出 (数据库正常落盘, 不再回档)
-     *   2. 等待 bat 进程自然退出 (最多 10 秒)
+     *   2. 等待 DfoServer 进程真正退出 (最多 15 秒)
+     *      v2.15: 旧逻辑只等 bat 句柄 — UI 重启过或服务端手动启动时 _batProcess
+     *      为 null, 等待循环 0 秒即过, CleanOrphans 立刻强杀存盘中的 DfoServer,
+     *      恰好复现了优雅停服要避免的回档。现在直接轮询 DfoServer 进程本体。
      *   3. 超时未退出 → taskkill /F /T 强杀兜底
      *   4. CleanOrphans() 最终兜底 (优雅退出生效时此处无残留)
      *
@@ -281,23 +316,28 @@ public class ServerService
 
         if (graceful)
         {
-            // 等待 bat 自然退出 (DfoServer 退出 → bat 结束 → Exited 事件清理)
-            var deadline = DateTime.UtcNow.AddSeconds(10);
+            // 等待 DfoServer 自行退出 (保存数据) — 与 bat 句柄无关
+            var deadline = DateTime.UtcNow.AddSeconds(15);
             while (DateTime.UtcNow < deadline)
             {
-                if (_batProcess == null || _batProcess.HasExited) break;
-                System.Threading.Thread.Sleep(200);
+                if (!IsDfoServerRunning(GetDistDir())) break;
+                System.Threading.Thread.Sleep(250);
             }
-            if (_batProcess != null && !_batProcess.HasExited)
+
+            // 仍未退出 → 强杀兜底
+            if (IsDfoServerRunning(GetDistDir()))
             {
-                // 优雅退出超时 → 强杀兜底
-                KillProcessTree(_batProcess);
+                bool batAlive = false;
+                try { batAlive = _batProcess != null && !_batProcess.HasExited; } catch { }
+                if (batAlive) KillProcessTree(_batProcess);
             }
         }
         else
         {
             // 找不到 DfoServer / 发送失败 → 直接强杀
-            if (_batProcess != null && !_batProcess.HasExited)
+            bool batAlive = false;
+            try { batAlive = _batProcess != null && !_batProcess.HasExited; } catch { }
+            if (batAlive)
                 KillProcessTree(_batProcess);
         }
 

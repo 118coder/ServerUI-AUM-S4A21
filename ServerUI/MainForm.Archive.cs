@@ -25,20 +25,36 @@ public partial class MainForm : AntdUI.Window
 {
     /*
      * 导入存档 (IA) — 选择 ZIP 压缩包，解压覆盖到主存档目录
+     * v2.15: 纳入 DoArchiveOp 统一防护 (旧代码绕过检查, 服务端运行中也能导入导致
+     * DB 锁冲突/损坏); 补充异常捕获与导入前自动备份
      */
     internal void IA()
     {
         using var d = new OpenFileDialog { Filter = "ZIP|*.zip" };
-        if (d.ShowDialog() == DialogResult.OK)
+        if (d.ShowDialog() != DialogResult.OK) return;
+        DoArchiveOp(() =>
         {
-            _ar.ImportFromZip(_ad, d.FileName);
+            try
+            {
+                _ar.ImportFromZip(_ad, d.FileName);
+            }
+            catch (Exception ex)
+            {
+                Lg(">>> [导入存档] 导入失败: " + ex.Message, Rd);
+                MessageBox.Show("导入失败：" + ex.Message
+                    + "\n\n请确认 ZIP 文件完整、且服务端已停止。",
+                    "导入存档", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
             LS("已导入: " + Path.GetFileName(d.FileName));
             RA();
-        }
+            return true;
+        });
     }
 
     /*
      * 导出当前 (EC) — 把当前 DB 存档 + 杂DB 打包为 ZIP
+     * v2.15: 纳入 DoArchiveOp 防护 + 异常捕获; Data 目录缺失时不再假报"已导出"
      */
     internal void EC()
     {
@@ -47,26 +63,65 @@ public partial class MainForm : AntdUI.Window
             Filter = "ZIP|*.zip",
             FileName = "存档_" + DateTime.Now.ToString("MMdd_HHmm") + ".zip"
         };
-        if (d.ShowDialog() == DialogResult.OK)
+        if (d.ShowDialog() != DialogResult.OK) return;
+        DoArchiveOp(() =>
         {
-            _ar.ExportAsZip(_ad, d.FileName);
+            try
+            {
+                _ar.ExportAsZip(_ad, d.FileName);
+            }
+            catch (Exception ex)
+            {
+                Lg(">>> [导出存档] 导出失败: " + ex.Message, Rd);
+                MessageBox.Show("导出失败：" + ex.Message, "导出存档",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+            if (!File.Exists(d.FileName))
+            {
+                Lg(">>> [导出存档] 导出失败：服务端 Data 目录不存在（尚未部署服务端？）", Rd);
+                MessageBox.Show("导出失败：未找到服务端 Data 目录，请先完成服务端更新。",
+                    "导出存档", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
             LS("已导出: " + Path.GetFileName(d.FileName));
-        }
+            return true;
+        });
     }
 
     /*
      * 储存当前存档 (SC) — 在切换库中新建文件夹，存储当前所有 inventory* 文件
+     * v2.15: 纳入 DoArchiveOp 防护 + 名称合法性校验 + 异常捕获
      */
     internal void SC()
     {
         var n = Interaction.InputBox("名称:", "储存当前存档",
             DateTime.Now.ToString("MMdd_HHmm"));
-        if (!string.IsNullOrWhiteSpace(n))
+        if (string.IsNullOrWhiteSpace(n)) return;
+        if (n.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
-            _ar.SaveArchive(_ad, n);
+            MessageBox.Show("存档名称包含不允许的字符（\\ / : * ? \" < > | 等），请换个名称。",
+                "储存当前存档", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        DoArchiveOp(() =>
+        {
+            try
+            {
+                _ar.SaveArchive(_ad, n);
+            }
+            catch (Exception ex)
+            {
+                Lg(">>> [储存存档] 储存失败: " + ex.Message, Rd);
+                MessageBox.Show("储存失败：" + ex.Message
+                    + "\n\n请确认服务端已停止后再试。",
+                    "储存当前存档", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
             LS("已储存到切换库: " + n);
             RA();
-        }
+            return true;
+        });
     }
 
     /*
@@ -282,10 +337,11 @@ public partial class MainForm : AntdUI.Window
 
     /*
      * 存档操作包装器 (DoArchiveOp) — 服务端运行时阻止存档操作
+     * v2.15: 判定改用 ServerAlive() — 手动启动的服务端 (bat 句柄未持有) 同样被拦截
      */
     internal void DoArchiveOp(Func<bool> op)
     {
-        if (_sv.IsRunning)
+        if (ServerAlive())
         {
             Lg(">>> [存档管理] 服务端运行中，操作已阻止", Or);
             MessageBox.Show(

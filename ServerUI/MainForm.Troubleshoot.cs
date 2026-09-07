@@ -69,6 +69,14 @@ public partial class MainForm : AntdUI.Window
 ("第二类：客户端与启动环境",
               "角色选择/创建界面闪退怎么办？", "FullscreenOutlined", "角色选择/创建界面闪退怎么办？",
               "经追踪，该问题主要与高帧率有关。请尝试以下方案：\n方案一：切换至核显运行（适用于同时拥有独显和核显的电脑）\nWindows设置 → 系统 → 屏幕 → 显示卡 → 添加DNF.exe → 选项 → 选择\"节能\"（核显）→ 保存。\n方案二：限制帧率（适用于无核显或不愿切换显卡的电脑）\nNVIDIA控制面板 → 管理3D设置 → 程序设置 → 添加DNF.exe → 开启\"最大帧速率\" → 设为120 FPS → 应用。\n两种方法均实测有效，建议优先尝试方案二。若已使用角色界面补丁，建议先还原官方资源。\n————————\n原理说明\n2.033端使用老版32位DX9客户端，较新NVIDIA显卡搭配高刷显示器时，帧率可飙升至800+ FPS。DX9在角色界面需频繁加载贴图，过高帧率导致渲染与资源加载线程同步紊乱，触发崩溃。\n方案一利用核显性能有限、无法输出极端帧率的特点，自然规避问题；方案二通过驱动直接锁帧，从源头控制。\n另有日志报错CharacterCreate/CharacterCreate.img (48)，核查该IMG实际仅45帧，但补齐后闪退依旧，证明帧率才是核心原因。\n如有其他环境差异，请补充反馈，我们会继续协助排查。"),
+
+            ("第二类：客户端与启动环境",
+             "CET兼容提示导致无法游戏/更新？", "SafetyCertificateOutlined", "CET兼容提示导致无法游戏/更新？",
+             "CET（Control-flow Enforcement，硬件强制栈保护）是较新 Windows/Intel 平台的进程保护机制。部分旧 CPU、驱动或系统组合下，.NET 程序（服务端、GM工具、更新编译流程）可能因此启动失败或弹出兼容提示。\n\nv2.15 起管理器已在所有启动链路（服务端 / GM工具 / 更新编译）自动注入 DOTNET_EnableCET=0 规避此问题，直接用管理器操作即可。\n\n若通过 bat 手动操作仍遇到问题，任选其一：\n方案一（推荐）：管理员运行 cmd，执行 setx DOTNET_EnableCET 0，然后重新打开程序；\n方案二（Windows 11 24H2）：管理员运行 cmd，为单个程序关闭栈保护：\nreg add \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\DfoServer.exe\" /v CETCOMPAT /t REG_DWORD /d 0 /f\n（DfoGmTool.exe 同理再执行一次，把程序名替换即可）"),
+
+            ("第二类：客户端与启动环境",
+             "开始游戏后服务端瞬间断联？", "DisconnectOutlined", "开始游戏后服务端瞬间断联？",
+             "服务端（DfoServer.exe）启动后立即退出，通常不是编译问题（编译只在更新时进行）。请按以下顺序排查：\n\n1. 杀毒软件拦截（最常见）：自包含的 DfoServer.exe 启动时会自解压，部分杀软会静默查杀 → 将游戏根目录与 AUM管理组件 目录加入杀软白名单（推荐火绒，误杀率低）后重试；\n2. 端口被残留进程占用：上次异常退出可能留下 DfoServer 残留 → v2.15 管理器启动服务端前会自动清理残留进程，若仍失败请重启电脑；\n3. CET 兼容问题 → 参考上一条\"CET兼容提示\"处理；\n4. DfoServer.exe 缺失：说明尚未完成服务端更新，请先执行一次【开始更新】。\n\nv2.15 的管理器会在服务端异常退出时于运行日志中给出退出代码与以上排查提示。"),
         };
 
         var root = new TableLayoutPanel

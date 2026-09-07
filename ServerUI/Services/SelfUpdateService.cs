@@ -40,6 +40,19 @@ public class SelfUpdateService
     const string RepoZipUrl = "https://github.com/118coder/ServerUI-AUM-S4A21/archive/refs/heads/main.zip";
     const string VerFile = "AUM-version.txt";
 
+    // v2.15: 镜像仓库下载令牌 (与 GiteeAdapter/GitHubAdapter 一致的双重 base64)
+    // Gitee/GitHub 镜像仓库均为私有仓库 — raw 直链不带 token 会 404/403,
+    // Gitee raw 直链即使带 token 也不支持认证, 必须走 API contents 端点
+    const string GiteeMirrorTokenB64 = "WlRsbVpXWmlPRE0zWWpsaU5UVTBaamRpTVdaak4yRXdZbVprTlRKaFpUaz0=";
+    const string GitHubMirrorTokenB64 = "WjJod1gyOUdVVVJHZFc1dFEwSkVaRzQzTVZObVVWRm5NWFUzYzJObVRVZzNaakZzUmtOa1FnPT0=";
+    const string GiteeMirrorApi = "https://gitee.com/api/v5/repos/c118oder/ServerS4A12.86JP/contents/";
+    const string GitHubMirrorApi = "https://api.github.com/repos/118coder/ServerS4A12.86JP/contents/";
+    const string CodebergMirrorRaw = "https://codeberg.org/118coder/ServerS4A12.86JP/raw/branch/main/";
+
+    static string DecodeToken2(string b64) =>
+        Encoding.UTF8.GetString(Convert.FromBase64String(
+            Encoding.UTF8.GetString(Convert.FromBase64String(b64))));
+
     public string RemoteVersion { get; private set; }
 
     public event Action<string> OutputReceived;
@@ -596,42 +609,87 @@ public class SelfUpdateService
         try
         {
             // v2.12 修复: 启用镜像仓库时总是拉取镜像更新日志并覆盖本地 —
-            // 旧逻辑"仅本地缺失时下载"导致本地已有日志时镜像日志从不拉取（用户实测确认仍失败）;
-            // 镜像日志由开发者每次更新时上传, 以镜像为准覆盖本地, 保证本地日志与镜像保持一致。
+            // 旧逻辑"仅本地缺失时下载"导致本地已有日志时镜像日志从不拉取;
+            // 镜像日志由开发者/众包在每次更新时上传, 以镜像为准覆盖本地。
             var dest = Path.Combine(destDir, "更新日志.txt");
             var destDirInfo = new DirectoryInfo(destDir);
             if (!destDirInfo.Exists) return;
 
+            // v2.13: S4A21 镜像日志统一用 S4A21更新日志.txt，与已停维护的 S4A12 的
+            // 更新日志.txt 区分开。v2.15 重写拉取链:
+            //   Gitee API(带令牌, 国内直连优先) → GitHub API(带令牌) → Codeberg raw(公开, 兜底)
+            // 旧实现用裸 raw 直链, 对私有仓库必 404/403, 实际只剩 Codeberg 一条路可用。
+            // 国内用户 Gitee 最快最稳, 故 Gitee 排第一。
+            var fileName = "mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt";
+            byte[] data = null;
+
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
             client.DefaultRequestHeaders.Add("User-Agent", "ServerUI-AUM");
 
-            // v2.13: S4A21 镜像日志统一用 S4A21更新日志.txt，与 S4A12-AUM 上传的
-            // 更新日志.txt 区分开，避免两个工具共用镜像仓库互相覆盖。
-            // 拉取顺序: Gitee(国内直连优先) → GitHub → Codeberg(兜底) — 很多人连不上 GitHub，
-            // 国内用户 Gitee 最快，故 Gitee 排第一。
-            var urls = new[] {
-                UpdateService.MirrorGiteeRaw    + "/mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt",
-                UpdateService.MirrorGitHubRaw   + "/mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt",
-                UpdateService.MirrorCodebergRaw + "/mirrors/S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt"
-            };
-
-            foreach (var url in urls)
+            // 第1级: Gitee API (国内直连优先, 私有仓库走 contents 端点 + 令牌)
+            if (data == null)
             {
                 try
                 {
-                    var data = await client.GetByteArrayAsync(url);
-                    if (data.Length > 100)
+                    var url = GiteeMirrorApi + fileName + "?access_token=" + Uri.EscapeDataString(DecodeToken2(GiteeMirrorTokenB64));
+                    var json = await client.GetStringAsync(url);
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("content", out var c))
+                        data = FromBase64Loose(c.GetString());
+                }
+                catch { }
+            }
+
+            // 第2级: GitHub API (带令牌; raw 直链对私有仓库返回 404)
+            if (data == null)
+            {
+                try
+                {
+                    using var req = new HttpRequestMessage(HttpMethod.Get, GitHubMirrorApi + fileName + "?ref=main");
+                    req.Headers.Add("Authorization", "token " + DecodeToken2(GitHubMirrorTokenB64));
+                    using var resp = await client.SendAsync(req);
+                    if (resp.IsSuccessStatusCode)
                     {
-                        File.WriteAllBytes(dest, data);
-                        OutputReceived?.Invoke($"[AUM更新] 镜像更新日志已拉取: {data.Length}B → {dest}");
-                        return;
+                        var json = await resp.Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(json);
+                        if (doc.RootElement.TryGetProperty("content", out var c))
+                            data = FromBase64Loose(c.GetString());
                     }
                 }
                 catch { }
             }
-            OutputReceived?.Invoke("[AUM更新] 镜像更新日志拉取失败（三个镜像均不可达或日志为空）");
+
+            // 第3级: Codeberg raw (公开仓库, 兜底)
+            if (data == null)
+            {
+                try
+                {
+                    data = await client.GetByteArrayAsync(CodebergMirrorRaw + fileName);
+                }
+                catch { }
+            }
+
+            if (data != null && data.Length > 100)
+            {
+                File.WriteAllBytes(dest, data);
+                OutputReceived?.Invoke($"[AUM更新] 镜像更新日志已拉取: {data.Length}B → {dest}");
+            }
+            else
+                OutputReceived?.Invoke("[AUM更新] 镜像更新日志拉取失败（三个镜像均不可达或日志为空）");
         }
         catch { }
+    }
+
+    /* 宽松 base64 解码: 忽略空白字符 (GitHub contents API 的 content 带 \n 换行) */
+    static byte[] FromBase64Loose(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return null;
+        var sb = new StringBuilder(s.Length);
+        foreach (var ch in s)
+            if (!char.IsWhiteSpace(ch)) sb.Append(ch);
+        if (sb.Length == 0) return null;
+        try { return Convert.FromBase64String(sb.ToString()); }
+        catch { return null; }
     }
 
     static void SyncRootFiles(string repoRoot, string userRoot)

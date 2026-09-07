@@ -1,5 +1,7 @@
 ﻿# v1.917: AUM 管理器自更新脚本
 $ErrorActionPreference = "Continue"
+# v2.15: 关闭进度渲染 (去噪音 + 中文重叠 + 提速)
+$ProgressPreference = "SilentlyContinue"
 $ScriptRoot = $PSScriptRoot
 if ((Get-Item $ScriptRoot).Name -eq 'ps1核心') { $ScriptRoot = (Get-Item $ScriptRoot).Parent.FullName }
 

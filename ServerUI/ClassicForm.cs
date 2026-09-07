@@ -370,6 +370,13 @@ public partial class ClassicForm : AntdUI.Window
             Lg(">>> 点击了重启服务端", Color.CornflowerBlue);
             await System.Threading.Tasks.Task.Run(() => _main._sv.Stop());
             await System.Threading.Tasks.Task.Delay(1200);
+            // v2.15: bat 不存在时 Start() 静默跳过 (首次使用未更新), 不再假报"已重新启动"
+            var bat = Path.Combine(_main._ad, "ServerS4A21-AUM", "start-server.bat");
+            if (!File.Exists(bat))
+            {
+                Lg(">>> 未找到 start-server.bat，无法重启。请先执行一次更新部署服务端。", Or);
+                return;
+            }
             _main._sv.Start(Path.Combine(_main._ad, "ServerS4A21-AUM"));
             _ = System.Threading.Tasks.Task.Run(async () =>
             {
@@ -377,7 +384,7 @@ public partial class ClassicForm : AntdUI.Window
                 try { _main._sv.HideConsoleWindow(); } catch { }
                 try { ServerService.HideDfoServerWindow(); } catch { }
             });
-            Lg(">>> 服务端已重新启动", Gn);
+            Lg(">>> 已发起服务端重启 (3 秒后自动确认进程状态)", Gn);
         };
         ctrlG.Controls.Add(btStop, 0, 0);
         ctrlG.Controls.Add(btRe, 1, 0);
@@ -909,32 +916,45 @@ public partial class ClassicForm : AntdUI.Window
         var path = Path.Combine(_main._ad, "存档管理", "切换库", nm);
         _main.DoArchiveOp(() =>
         {
-            if (Directory.GetFiles(path, "*.db").Length == 0)
+            try
             {
-                Lg(">>> [切换存档] 没有存档", Or);
-                MessageBox.Show("没有存档", "切换存档",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (!Directory.Exists(path) || Directory.GetFiles(path, "*.db").Length == 0)
+                {
+                    Lg(">>> [切换存档] 没有存档", Or);
+                    MessageBox.Show("没有存档", "切换存档",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    RefreshArchives();
+                    return false;
+                }
+                if (_main._ar.IsSimpleArchive(_main._ad, path))
+                {
+                    var r = MessageBox.Show(
+                        "该存档文件夹内仅有一个.DB的主存档文件，是否执行一次对主目录的冗杂DB清理？",
+                        "存档切换",
+                        MessageBoxButtons.YesNoCancel,
+                        MessageBoxIcon.Question);
+                    if (r == DialogResult.Cancel) return false;
+                    _main._ar.SwitchToArchive(_main._ad, path, cleanRedundantDbFirst: r == DialogResult.Yes);
+                }
+                else
+                {
+                    _main._ar.SwitchToArchive(_main._ad, path);
+                }
+                Lg(">>> 已切换到: " + nm, Gn);
+                RefreshArchives();
+                _main.TB();
+                if (cbCl.Checked) _main.CleanRedundantDb();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // v2.15: 存档被外部删除/占用等异常不再冒泡到全局崩溃兜底框
+                Lg(">>> [切换存档] 切换失败: " + ex.Message, Rd);
+                MessageBox.Show("切换存档失败：" + ex.Message, "切换存档",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                RefreshArchives();
                 return false;
             }
-            if (_main._ar.IsSimpleArchive(_main._ad, path))
-            {
-                var r = MessageBox.Show(
-                    "该存档文件夹内仅有一个.DB的主存档文件，是否执行一次对主目录的冗杂DB清理？",
-                    "存档切换",
-                    MessageBoxButtons.YesNoCancel,
-                    MessageBoxIcon.Question);
-                if (r == DialogResult.Cancel) return false;
-                _main._ar.SwitchToArchive(_main._ad, path, cleanRedundantDbFirst: r == DialogResult.Yes);
-            }
-            else
-            {
-                _main._ar.SwitchToArchive(_main._ad, path);
-            }
-            Lg(">>> 已切换到: " + nm, Gn);
-            RefreshArchives();
-            _main.TB();
-            if (cbCl.Checked) _main.CleanRedundantDb();
-            return true;
         });
     }
 
@@ -962,17 +982,33 @@ public partial class ClassicForm : AntdUI.Window
                 var nn = Interaction.InputBox("修改存档名称:", "重命名", nm);
                 if (!string.IsNullOrWhiteSpace(nn) && nn != nm)
                 {
-                    var np = Path.Combine(_main._ad, "存档管理", "切换库", nn);
-                    if (Directory.Exists(path) && !Directory.Exists(np))
+                    // v2.15: 名称合法性校验 + 异常捕获 (非法字符/目标占用不再冒泡到崩溃兜底框)
+                    if (nn.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
                     {
-                        Directory.Move(path, np);
-                        Lg(">>> 已重命名: " + nm + " -> " + nn, Gn);
-                        RefreshArchives();
+                        MessageBox.Show("名称包含不允许的字符（\\ / : * ? \" < > | 等）。",
+                            "重命名存档", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
                     }
-                    else if (Directory.Exists(np))
-                        Lg("名称已存在", Color.Gold);
-                    else
-                        Lg("重命名失败", Color.Gold);
+                    var np = Path.Combine(_main._ad, "存档管理", "切换库", nn);
+                    try
+                    {
+                        if (Directory.Exists(path) && !Directory.Exists(np))
+                        {
+                            Directory.Move(path, np);
+                            Lg(">>> 已重命名: " + nm + " -> " + nn, Gn);
+                            RefreshArchives();
+                        }
+                        else if (Directory.Exists(np))
+                            Lg("名称已存在", Color.Gold);
+                        else
+                            Lg("重命名失败", Color.Gold);
+                    }
+                    catch (Exception ex)
+                    {
+                        Lg(">>> 重命名失败: " + ex.Message, Rd);
+                        MessageBox.Show("重命名失败：" + ex.Message, "重命名存档",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
                 }
             }
             else if (act == "switch")

@@ -198,6 +198,11 @@ public class MirrorUploadService
     {
         OutputReceived?.Invoke("[镜像] 检测到可访问 GitGud，启动上传者模式...");
 
+        // v2.15: 记录本次同步开始时本地更新日志的时间戳 —
+        // 日志由并行进行的更新流程在 [5/5] 末尾刷新, 上传前等待其刷新,
+        // 消除"镜像日志永远滞后一拍"的问题
+        var changelogBaselineUtc = GetChangelogWriteTimeUtc();
+
         var now = BeijingTime.Now;
         var commitCount = await GetGitGudCommitCount();
         var pkgName = $"ServerS4A21-{now:yyyyMMdd}-{now:HHmm}-{commitCount}";
@@ -223,6 +228,14 @@ public class MirrorUploadService
             if (zip == null || zip.Length < 51200)
             {
                 OutputReceived?.Invoke("[镜像] GitGud 下载失败，跳过镜像同步");
+                return false;
+            }
+
+            // v2.15: 上传前做 ZIP 完整性校验 — 被网关/代理污染或传输截断的包
+            // 连同其 SHA256 一起推上镜像, 会污染三平台的 latest.json 与包体
+            if (!Compat.IsValidZip(zip))
+            {
+                OutputReceived?.Invoke("[镜像] GitGud 下载内容不是有效 ZIP（可能被网络设备污染），跳过镜像同步");
                 return false;
             }
 
@@ -298,7 +311,7 @@ public class MirrorUploadService
                 if (anyOk)
                 {
                     OutputReceived?.Invoke("[镜像] 上传更新日志...");
-                    await UploadChangelog();
+                    await UploadChangelog(changelogBaselineUtc);
 
                     OutputReceived?.Invoke("[镜像] 上传 latest 副本...");
                     await UploadLatestCopy(zip);
@@ -493,6 +506,12 @@ public class MirrorUploadService
                 OutputReceived?.Invoke("[镜像] GM下载失败，跳过。");
                 return;
             }
+            // v2.15: GM 包上传前同样做完整性校验
+            if (!Compat.IsValidZip(gmZip))
+            {
+                OutputReceived?.Invoke("[镜像] GM 下载内容不是有效 ZIP（可能被网络设备污染），跳过。");
+                return;
+            }
 
             var gmSha = Compat.Sha256Hex(gmZip).ToLower();
             OutputReceived?.Invoke($"[镜像] GM: {gmZip.Length/1024}KB, SHA:{gmSha.Substring(0, 8)}...");
@@ -562,7 +581,19 @@ public class MirrorUploadService
         catch { }
     }
 
-    async Task UploadChangelog()
+    static DateTime GetChangelogWriteTimeUtc()
+    {
+        try
+        {
+            var exeDir = AppDomain.CurrentDomain.BaseDirectory;
+            var logFile = Path.Combine(exeDir, "AUM管理组件", "更新日志.txt");
+            if (!File.Exists(logFile)) logFile = Path.Combine(exeDir, "更新日志.txt");
+            return File.Exists(logFile) ? File.GetLastWriteTimeUtc(logFile) : DateTime.MinValue;
+        }
+        catch { return DateTime.MinValue; }
+    }
+
+    async Task UploadChangelog(DateTime baselineUtc)
     {
         try
         {
@@ -574,6 +605,21 @@ public class MirrorUploadService
             {
                 OutputReceived?.Invoke("[镜像] 本地无更新日志，跳过上传。");
                 return;
+            }
+
+            // v2.15: 等待本次更新流程刷新日志 (最长 6 分钟) —
+            // 更新日志在 update.ps1 [5/5] 末尾写入, 早于该时点读取会把
+            // 上一次更新留下的旧日志推上镜像, 导致镜像日志永远滞后一拍
+            var waitDeadline = DateTime.UtcNow.AddMinutes(6);
+            while (true)
+            {
+                if (File.GetLastWriteTimeUtc(logFile) > baselineUtc) break;
+                if (DateTime.UtcNow > waitDeadline)
+                {
+                    OutputReceived?.Invoke("[镜像] 本地更新日志未被本次更新刷新（更新未完成或勾选了跳过日志）→ 本次跳过日志上传，下次同步补上。");
+                    return;
+                }
+                await Task.Delay(TimeSpan.FromSeconds(20));
             }
 
             var bytes = File.ReadAllBytes(logFile);
