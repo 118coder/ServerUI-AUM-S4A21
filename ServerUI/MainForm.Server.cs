@@ -32,31 +32,23 @@ public partial class MainForm : AntdUI.Window
         _pt = new Timer { Interval = 500 };
         _pt.Tick += (s, e) =>
         {
-            // ===== 伪进度算法: 进度条永不卡死 =====
-            // 1. 收到真实阶段标记(_stepTarget 前进) → 大步追赶, 制造"刚完成一个阶段"的跳跃感
-            // 2. 追平目标但更新未结束 → 缓慢蠕动逼近 90 (剩余量按比例递减, 永不完成)
-            // 3. 超过 90 → 极慢蠕动 + 在 94~95 区间轻微"呼吸"波动, 让用户知道仍在工作
-            // 真实进度标记(##PROGRESS##/[N/5])仍会驱动 _stepTarget, 完成时 OD 直接跳 100%
+            // ===== v2.15 真实里程碑跟随 =====
+            // _stepTarget 只由 update.ps1 的真实节点驱动(源预检8/下载20/同步30/
+            // 编译产物落盘62·72·80/日志87-95), 显示值永不越过最新真实节点:
+            //   未达目标: 按 gap*0.16/500ms 平滑收敛, 不越过目标
+            //   已达目标: 仅做 0.03%/tick 的阶段内缓推(上限 里程碑+4, 绝对上限 97), 表明仍在工作
+            // 100% 只由完成回调 (OD) 设置
             if (_pv < _stepTarget)
             {
                 var gap = _stepTarget - _pv;
-                _pv += Math.Max(1.5f, gap * 0.35f);
+                _pv += Math.Min(gap, Math.Max(0.35f, gap * 0.16f));
                 if (_pv > _stepTarget) _pv = _stepTarget;
             }
-            else if (_pv < 90)
+            else if (_pv < Math.Min(_stepTarget + 4f, 97f))
             {
-                var rem = 90 - _pv;
-                _pv += Math.Max(0.3f, rem * 0.02f);
+                _pv += 0.03f;
             }
-            else
-            {
-                var rem = 95 - _pv;
-                if (rem > 1f)
-                    _pv += Math.Max(0.15f, rem * 0.025f);   // 90→94: 约15秒到达, 持续可见推进
-                else
-                    _pv = 94.2f + (float)(Math.Sin(Environment.TickCount / 400.0) + 1) * 0.4f; // 94.2~95.0 呼吸
-            }
-            pb.Value = Math.Min(_pv, 100f) / 100f;   // AntdUI Progress.Value 为 0-1 比率
+            pb.Value = Math.Min(_pv, 99f) / 100f;   // AntdUI Progress.Value 为 0-1 比率
             lbPg.Text = "更新进度: " + (int)_pv + "%";
         };
 
@@ -1186,9 +1178,9 @@ public partial class MainForm : AntdUI.Window
             {
                 BeginInvokeUi(() =>
                 {
-                    if (pct > _stepTarget && pct <= 95) _stepTarget = pct;
-                    _pv = Math.Max(_pv, pct - 3);   // 贴近真实进度, 剩余交给蠕动
-                    pb.Value = Math.Min(_pv, 95f) / 100f;
+                    if (pct > _stepTarget && pct <= 97) _stepTarget = pct;
+                    _pv = Math.Max(_pv, pct - 5);   // 真实节点到达: 轻微贴近后平滑收敛
+                    pb.Value = Math.Min(_pv, 97f) / 100f;
                     lbPg.Text = "更新进度: " + (int)_pv + "%";
                     ProgressHook?.Invoke((int)_pv);     // 转发到经典模式窗口
                 });
@@ -1215,12 +1207,12 @@ public partial class MainForm : AntdUI.Window
         var sm = System.Text.RegularExpressions.Regex.Match(m, @"\[(\d)/5\]");
         if (sm.Success && int.TryParse(sm.Groups[1].Value, out var step))
         {
-            int target = step switch { 1 => 5, 2 => 25, 3 => 55, 4 => 85, 5 => 93, _ => -1 };
+            int target = step switch { 1 => 5, 2 => 10, 3 => 30, 4 => 55, 5 => 85, _ => -1 };
             BeginInvokeUi(() =>
             {
-                if (target >= 0) _stepTarget = target;
-                if (_pv < _stepTarget - 8) _pv = _stepTarget - 8;   // 大步跳到阶段附近, 剩余交给蠕动
-                pb.Value = Math.Min(_pv, 95f) / 100f;
+                if (target > _stepTarget) _stepTarget = target;   // v2.15: 只前进, 防旧标记回拉
+                if (_pv < _stepTarget - 5) _pv = _stepTarget - 5;
+                pb.Value = Math.Min(_pv, 97f) / 100f;
                 lbPg.Text = "更新进度: " + (int)_pv + "%";
                 ProgressHook?.Invoke((int)_pv);     // 转发到经典模式窗口
             });
