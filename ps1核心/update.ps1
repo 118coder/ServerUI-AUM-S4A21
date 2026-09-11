@@ -631,7 +631,7 @@ function Sync-CommitHistory {
             }
             $newCount++
         }
-        Write-Host "##PROGRESS##60"   # 进度标记：60%（第 1 页已拉完）
+        Write-Host "##PROGRESS##87"   # 进度标记：87%（第 1 页已拉完）
 
         # 如果第 1 页不满 50 条 → 说明只有一页，直接返回
         if ($items.Count -lt 50) {
@@ -747,7 +747,7 @@ function Sync-CommitHistory {
 
                 # 动态更新进度条，公式：60 + (页码/11) * 33，范围 60~93
                 # 页码越大，进度越接近 93%
-                $pp = 60 + [math]::Min(33, [math]::Round(($pg / 11) * 33))
+                $pp = 87 + [math]::Min(8, [math]::Round(($pg / 11) * 8))
                 Write-Host "##PROGRESS##$pp"
 
                 # 如果这页不满 50 条 → 最后一页，没有更多了
@@ -763,7 +763,7 @@ function Sync-CommitHistory {
     # 按 commit 日期降序排列（最新的在前面）
     $merged = @($known.Values | Sort-Object {[DateTimeOffset]"$($_.Date)"} -Descending)
     if ($newCount -gt 0) { Write-CommitCache $merged }
-    Write-Host "##PROGRESS##93"   # 93% 进度
+    Write-Host "##PROGRESS##95"   # 95% 进度
     Write-Host "[提交日志] 缓存: $($merged.Count) 条 ($newCount 新增)。"
     return @{ Commits=$merged; Complete=($merged.Count -gt 0); Refreshed=($newCount -gt 0) }
 }
@@ -1123,6 +1123,7 @@ try {
     $sourceAvailability = Test-SourceAvailability
     }
     
+    Write-Host "##PROGRESS##8"   # v2.15: 源预检完成
     $skipGitGud = -not $sourceAvailability.GitGud
     $mirrorsAvailable = $sourceAvailability.Gitee -or $sourceAvailability.GitHub -or $sourceAvailability.Codeberg
 
@@ -2000,6 +2001,32 @@ try {
         [void]$gmPS.AddArgument($gmProject)
         [void]$gmPS.AddArgument($gmDir)
         $gmHandle = $gmPS.BeginInvoke()
+
+        # ---- v2.15: 编译期真实进度轮询 ----
+        # 编译输出在 runspace 内缓冲、结束时才回传, 此前 [4/5] 段(55→85)无任何真实节点;
+        # 主作用域轮询三个"真实产物信号"(LastWriteTimeUtc 晚于编译开始才算, 旧产物不误报):
+        #   62 = 服务端 restore 完成 (obj\project.assets.json 被重写)
+        #   72 = 服务端 publish 完成 (dist\win-x64\DfoServer.exe 被重写)
+        #   80 = GM publish 完成    (dfogmtool\publish\DfoGmTool.exe 被重写)
+        $buildT0 = (Get-Date).ToUniversalTime()
+        $assetsFile = Join-Path $serverDir "obj\project.assets.json"
+        $svrExeOut  = Join-Path $distDir  "DfoServer.exe"
+        $gmExeOut   = Join-Path $gmDir    "publish\DfoGmTool.exe"
+        $p62 = $false; $p72 = $false; $p80 = $false
+        while (-not $svrHandle.IsCompleted -or -not $gmHandle.IsCompleted) {
+            Start-Sleep -Milliseconds 800
+            try {
+                if (-not $p62 -and (Test-Path $assetsFile) -and (Get-Item $assetsFile -ErrorAction SilentlyContinue).LastWriteTimeUtc -gt $buildT0) {
+                    $p62 = $true; Write-Host "##PROGRESS##62"
+                }
+                if (-not $p72 -and (Test-Path $svrExeOut) -and (Get-Item $svrExeOut -ErrorAction SilentlyContinue).LastWriteTimeUtc -gt $buildT0) {
+                    $p72 = $true; Write-Host "##PROGRESS##72"
+                }
+                if (-not $p80 -and (Test-Path $gmExeOut) -and (Get-Item $gmExeOut -ErrorAction SilentlyContinue).LastWriteTimeUtc -gt $buildT0) {
+                    $p80 = $true; Write-Host "##PROGRESS##80"
+                }
+            } catch { }
+        }
 
         # ---- 等待服务端编译完成（先完成先处理） ----
         $svrResult = $svrPS.EndInvoke($svrHandle)

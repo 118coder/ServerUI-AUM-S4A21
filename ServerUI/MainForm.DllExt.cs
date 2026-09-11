@@ -375,6 +375,12 @@ public partial class MainForm : AntdUI.Window
     string ReadConfigText(string path, out Encoding enc)
     {
         var bytes = File.ReadAllBytes(path);
+        // v2.15: 剥离 UTF-8 BOM — 旧实现把 BOM 当普通字符读入、保存时又写回, BOM 永远删不掉
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+        {
+            enc = new UTF8Encoding(false);
+            return new UTF8Encoding(false, true).GetString(bytes, 3, bytes.Length - 3);
+        }
         try
         {
             var s = new UTF8Encoding(false, true).GetString(bytes);
@@ -402,24 +408,20 @@ public partial class MainForm : AntdUI.Window
      */
     string ReadIniText(string path, out Encoding writeEnc)
     {
+        // v2.15: GameGaurd.ini 一律以 UTF-8 无 BOM 写回 (用户实测原格式为 UTF-8;
+        // 带 BOM 会导致挂载器首个节头解析异常, 且旧实现"有 BOM 保持 BOM"会永久沿用错误格式)。
+        // 读取时兼容 旧带BOM文件 与 GBK 历史文件, 读出的内容不含 BOM 字符。
         writeEnc = new UTF8Encoding(false);
         if (!File.Exists(path)) return "";
         var bytes = File.ReadAllBytes(path);
         if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-        {
-            writeEnc = new UTF8Encoding(true);
-            return new UTF8Encoding(true).GetString(bytes, 3, bytes.Length - 3);
-        }
+            return new UTF8Encoding(false, true).GetString(bytes, 3, bytes.Length - 3);
         try
         {
-            var s = new UTF8Encoding(false, true).GetString(bytes);
-            writeEnc = new UTF8Encoding(false);
-            return s;
+            return new UTF8Encoding(false, true).GetString(bytes);
         }
         catch (DecoderFallbackException) { }
-        var gbk = Encoding.GetEncoding(936);
-        writeEnc = gbk;
-        return gbk.GetString(bytes);
+        return Encoding.GetEncoding(936).GetString(bytes);
     }
 
     /* GameGaurd.ini 编码感知按行读取 (替代 File.ReadAllLines 的默认 UTF-8 读取) */
@@ -429,11 +431,10 @@ public partial class MainForm : AntdUI.Window
         return text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
     }
 
-    /* GameGaurd.ini 按原编码写回 (v2.15) — GBK 文件写 GBK, UTF-8(BOM/无BOM) 保持原样 */
+    /* GameGaurd.ini 一律 UTF-8 无 BOM 写回 (v2.15) — 挂载器兼容格式 */
     void WriteIniText(string iniPath, string text)
     {
-        ReadIniText(iniPath, out var enc);
-        File.WriteAllText(iniPath, text, enc);
+        File.WriteAllText(iniPath, text, new UTF8Encoding(false));
     }
 
     /* 从 客户端补丁.zip 提取模板文件内容 (不存在返回 null) */
@@ -468,14 +469,21 @@ public partial class MainForm : AntdUI.Window
         _swCust.Clear();
         // 运行期重建表格时按窗体 AutoScale 因子补偿字体/控件尺寸:
         // AutoScaleMode.Font 只缩放首次创建的控件, 重建的新控件若不补偿会整体变小（界面/字体缩小）
+        // v2.15: 运行期重建控件的缩放因子 — 从"已被窗体 AutoScale 的启动控件"实测推导,
+        // 保证重建行与首批控件用同一真实比例。旧实现用 DeviceDpi/96 且只缩放字体、
+        // 不缩放行高/列宽 → 4K 高 DPI 下添加自定义 DLL 触发重建时"字变大、行高不变",
+        // 内容被行高裁切, 表现为排版缩小/文字消失
         float k = 1f;
-        if (IsHandleCreated)
+        try
         {
-            // 用窗口当前 DPI 相对 96 的比值作缩放因子:
-            // 窗体首次 AutoScale（Font 模式 ≈ DPI 比例）只缩放首批控件, 运行期重建控件需手动补偿
-            int dpi = DeviceDpi;
-            if (dpi > 0) k = dpi / 96f;
+            if (swDlls != null && swDlls.Length > 0 && swDlls[0].Height > 0)
+                k = swDlls[0].Height / 22f;                 // 启动开关设计高度 22
+            else if (IsHandleCreated && DeviceDpi > 0)
+                k = DeviceDpi / 96f;
         }
+        catch { }
+        if (k < 0.75f) k = 0.75f;
+        if (k > 4f) k = 4f;
         tbl.SuspendLayout();
         // 释放旧行控件（保留受管开关复用），避免多次刷新产生内存垃圾
         // v2.15: 倒序遍历 — 正序 foreach 中 Dispose 会把当前项移出集合,
@@ -502,7 +510,7 @@ public partial class MainForm : AntdUI.Window
         // ---- 未安装 DLL 扩展: 只显示空态提示, 不渲染"已安装插件"列表 ----
         if (!_patchInstalled)
         {
-            AddRow(44F);
+            AddRow(44F * k);
             var nt = new AntdUI.Label
             {
                 Text = "—— 未安装 DLL 扩展 ——",
@@ -514,7 +522,7 @@ public partial class MainForm : AntdUI.Window
             tbl.Controls.Add(nt, 0, 0);
             tbl.SetColumnSpan(nt, 3);
 
-            AddRow(64F);
+            AddRow(64F * k);
             var tip = new AntdUI.Label
             {
                 Text = "游戏根目录尚未安装客户端补丁（未发现挂载器 GameGaurd.dll / az.dll，且 GameGaurd.ini 无插件记录）。\n\n"
@@ -545,7 +553,7 @@ public partial class MainForm : AntdUI.Window
         }
 
         // ---- 表头 ----
-        AddRow(28F);
+        AddRow(28F * k);
         var hCap = new AntdUI.Label
         {
             Text = "已安装插件（勾选 = 挂载；受管插件与自定义扩展均以开关控制，底部为玩家自定义扩展）",
@@ -560,7 +568,7 @@ public partial class MainForm : AntdUI.Window
         // ---- 受管插件行 ----
         for (int i = 0; i < DllPlugins.Length; i++)
         {
-            AddRow(38F);
+            AddRow(38F * k);
             int row = tbl.RowCount - 1;
             var p = DllPlugins[i];
             var nm = new AntdUI.Label
@@ -592,7 +600,7 @@ public partial class MainForm : AntdUI.Window
                     BackColor = Color.Transparent
                 };
                 cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F));
+                cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F * k));
                 cell3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
                 var ed = new AntdUI.Button
@@ -622,7 +630,7 @@ public partial class MainForm : AntdUI.Window
         // ---- 自定义扩展 分组 ----（开关 = 挂载; 取消勾选后应用 = 从 [Plugins] 移除, 文件保留）
         if (custom.Count > 0)
         {
-            AddRow(28F);   // 与表头行高等高
+            AddRow(28F * k);   // 与表头行高等高
             int gro = tbl.RowCount - 1;
             var gCap = new AntdUI.Label
             {
@@ -637,7 +645,7 @@ public partial class MainForm : AntdUI.Window
 
             foreach (var f in custom)
             {
-                AddRow(38F);
+                AddRow(38F * k);
                 int row = tbl.RowCount - 1;
                 var exists = File.Exists(Path.Combine(_gr, f));
 
@@ -694,7 +702,7 @@ public partial class MainForm : AntdUI.Window
                     BackColor = Color.Transparent
                 };
                 cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F));   // 与受管行编辑按钮等宽
+                cell3.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F * k));   // 与受管行编辑按钮等宽
                 cell3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
                 cell3.Controls.Add(st, 0, 0);
                 cell3.Controls.Add(del, 1, 0);
@@ -705,7 +713,7 @@ public partial class MainForm : AntdUI.Window
         }
         else
         {
-            AddRow(30F);
+            AddRow(30F * k);
             int row = tbl.RowCount - 1;
             var empty = new AntdUI.Label
             {
