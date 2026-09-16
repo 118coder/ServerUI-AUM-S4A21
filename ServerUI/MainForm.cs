@@ -61,9 +61,9 @@ public partial class MainForm : AntdUI.Window
 
     // VER = 当前工具版本号 — 显示在窗口标题和启动日志中
 #if NET48
-    internal const string VER = "2.15-V";   // Win7 兼容模式
+    internal const string VER = "2.16-V";   // Win7 兼容模式
 #else
-    internal const string VER = "2.15";
+    internal const string VER = "2.16";
 #endif
 
     // ===== 路径计算 =====
@@ -781,6 +781,7 @@ public partial class MainForm : AntdUI.Window
     /*
      * 页面切换 (ShowPage) — 双缓冲 + 布局控制, 避免卡顿与残影
      * 先挂起布局, 切换可见性后立即对目标页强制布局, 再恢复布局并重绘内容区
+     * (v2.16 曾加方向感知滑入/短距平移动效, 用户三轮实测后拍板纯硬切, 已完整回退)
      */
     void ShowPage(string tag)
     {

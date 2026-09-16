@@ -37,15 +37,25 @@ public partial class MainForm : AntdUI.Window
     readonly Dictionary<string, AntdUI.Switch> _swCust = new(StringComparer.OrdinalIgnoreCase); // 自定义扩展行开关（文件名 → 开关）
     bool _dllRowsBuilt;                  // DLL 扩展表格是否已按当前状态构建（首次/状态变化时才重建）
     bool _lastPatchInstalled;            // 上次刷新时的补丁安装状态（变化时需重建列表）
+    // v2.16: 插件顺序 — 受管插件显示/写入顺序 (必选 GameNative 恒为首位, 可拖拽调整)
+    List<string> _managedOrder = new();
+    bool _managedOrderInit;              // 顺序是否已从 GameGaurd.ini 初始化
+    bool _orderDirty;                    // 拖拽调整顺序后、应用更改前为 true (刷新时保持手动顺序)
+    string _dragTag;                     // 当前拖拽行标识 ("M:文件名"=受管 / "C:文件名"=自定义)
+    bool _dragActive;                    // 已越过 4px 阈值、拖拽进行中
+    Point _dragStartTbl;                 // 拖拽起点 (tbl 坐标)
+    AntdUI.Label _dragHl;                // 拖拽高亮中的名称标签 (松开时恢复原色)
+    Color? _dragHlPrev;                  // 高亮前的前景色 (AntdUI 为可空色; 主题色/缺失红名)
+    readonly List<AntdUI.Label> _rowLabels = new();   // 视觉行名称标签 (实时 HitTest 用, 重建时刷新)
 
 
     // 客户端补丁受管理的插件 — 对应 客户端补丁.zip 内 GameGaurd.ini [Plugins] 列表
     // 元组: (文件名, 显示名, 说明, 可编辑配置文件); Config=null 表示无配置文件
     static readonly (string File, string Name, string Desc, string Config)[] DllPlugins =
     {
+        ("GameNative.dll",      "游戏原生整合",    "原生层游戏功能整合补丁（必选，不可关闭）", null),
         ("PreventMinimize.dll", "防止窗口最小化", "防止游戏窗口意外最小化", null),
         ("MultiInstance.dll",   "游戏多开",        "支持同时运行多个游戏客户端", null),
-        ("GameNative.dll",      "游戏原生整合",    "原生层游戏功能整合补丁（必选，不可关闭）", null),
         ("AutoFire.dll",        "自动连发",        "按住攻击键自动连续攻击", "AutoFire.ini"),
         ("EquipmentSwap.dll",   "一键换装",        "快捷切换预设装备插件，在游戏中按下end呼出，(EquipmentSwap.dll)", null),
         ("DpsMeter.dll",        "DPS 统计",        "战斗中实时统计输出", "DpsMeter.ini"),
@@ -126,14 +136,18 @@ public partial class MainForm : AntdUI.Window
             Dock = DockStyle.Top,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 3, RowCount = 0,
+            ColumnCount = 4, RowCount = 0,
             BackColor = Style.Get(Colour.BgContainer),   // 不透明背景, 滚动无残影
             Padding = new Padding(14, 8, 14, 8)
         };
+        tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30F));    // 拖拽手柄 (v2.16: 行首 ⠿ 图标, 拖拽只从手柄发起)
         tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 56F));    // 开关/图标
         tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 205F));   // 名称（DLL 文件名较长, 加宽避免换行/截断）
         tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));    // 说明/操作
         _dllTbl = tbl;
+        // v2.16: 实时拖拽排序 — Move/Up 事件挂在行首手柄按钮上, 不挂容器
+        // (按下的手柄自动持有隐式 Capture, Move/Up 全路由到手柄; 拖拽全程不重建行,
+        //  只原位交换单元格, 手柄控件存活到松开, 换位移动不影响 Capture)
         scroll.Controls.Add(tbl);
         cList.Controls.Add(scroll);
         d.Controls.Add(cList, 0, 1);
@@ -188,7 +202,7 @@ public partial class MainForm : AntdUI.Window
 
         var lbOp = new AntdUI.Label
         {
-            Text = "添加扩展 = 选择自己的插件挂载（复制到游戏根目录 + 写入 GameGaurd.ini）；删除扩展 = 移除已挂载的自定义插件；自定义扩展行有开关，取消勾选后应用 = 从列表移除（文件保留）",
+            Text = "添加扩展 = 选择自己的插件挂载（复制到游戏根目录 + 写入 GameGaurd.ini）；删除扩展 = 移除已挂载的自定义插件；自定义扩展行有开关，取消勾选后应用 = 从列表移除（文件保留）；拖动行首的手柄图标可调整加载顺序（必选项固定首位），调整后点击应用更改",
             Font = new Font("Microsoft YaHei UI", 8.5f),
             ForeColor = Color.FromArgb(130, 130, 138),
             Dock = DockStyle.Fill,
@@ -225,6 +239,7 @@ public partial class MainForm : AntdUI.Window
             var iniPath = Path.Combine(_gr, "GameGaurd.ini");
             var iniSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var custom = new List<string>();
+            var managedInFile = new List<string>();   // v2.16: ini 中受管条目的实际顺序
             bool hasPlugins = false;
             if (File.Exists(iniPath))
             {
@@ -240,8 +255,27 @@ public partial class MainForm : AntdUI.Window
                         iniSet.Add(v);
                         if (!IsManagedDll(v))
                             custom.Add(v);   // 自定义扩展 = 非受管插件 (S4A21MemOpt.dll 等第三方插件同样归入, 自由管理)
+                        else if (!managedInFile.Contains(v, StringComparer.OrdinalIgnoreCase))
+                            managedInFile.Add(v);
                     }
                 }
+            }
+
+            // v2.16: 受管插件显示/写入顺序 — 首次按 GameGaurd.ini 实际顺序初始化
+            // (必选 GameNative 恒为首位, 其余按 ini 顺序, ini 中缺失的按 DllPlugins 定义顺序补齐),
+            // 之后保持用户拖拽调整的顺序, 应用更改时按此顺序写入
+            if (!_managedOrderInit)
+            {
+                _managedOrder.Clear();
+                foreach (var p in DllPlugins)
+                    if (IsGameNative(p.File)) { _managedOrder.Add(p.File); break; }
+                foreach (var f in managedInFile)
+                    if (IsManagedDll(f) && !_managedOrder.Contains(f, StringComparer.OrdinalIgnoreCase))
+                        _managedOrder.Add(f);
+                foreach (var p in DllPlugins)
+                    if (!_managedOrder.Contains(p.File, StringComparer.OrdinalIgnoreCase))
+                        _managedOrder.Add(p.File);
+                _managedOrderInit = true;
             }
 
             // 是否已安装 DLL 扩展: 挂载器文件存在 或 GameGaurd.ini 已有插件记录
@@ -273,13 +307,16 @@ public partial class MainForm : AntdUI.Window
             _lastPatchInstalled = _patchInstalled;
             bool listChanged = !_dllRowsBuilt
                 || patchChanged
-                || custom.Count != _custRows.Count
-                || !custom.SequenceEqual(_custRows, StringComparer.OrdinalIgnoreCase);
+                || (!_orderDirty && (custom.Count != _custRows.Count
+                    || !custom.SequenceEqual(_custRows, StringComparer.OrdinalIgnoreCase)));
             if (listChanged)
             {
-                _custRows.Clear();
-                _custRows.AddRange(custom);
-                RebuildDllRows(custom);
+                if (!_orderDirty)
+                {
+                    _custRows.Clear();
+                    _custRows.AddRange(custom);
+                }
+                RebuildDllRows(_custRows);
             }
             else
             {
@@ -466,6 +503,10 @@ public partial class MainForm : AntdUI.Window
     {
         var tbl = _dllTbl;
         if (tbl == null) return;
+        // 重建前保存自定义开关勾选状态 — 旧实现一律按 Checked=true 新建,
+        // 任何重建都会把"已取消勾选、尚未应用"的行悄悄勾回去 (拖拽/添加/刷新均中招)
+        var prevCustOn = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in _swCust) prevCustOn[kv.Key] = kv.Value.Checked;
         _swCust.Clear();
         // 运行期重建表格时按窗体 AutoScale 因子补偿字体/控件尺寸:
         // AutoScaleMode.Font 只缩放首次创建的控件, 重建的新控件若不补偿会整体变小（界面/字体缩小）
@@ -484,6 +525,7 @@ public partial class MainForm : AntdUI.Window
         catch { }
         if (k < 0.75f) k = 0.75f;
         if (k > 4f) k = 4f;
+        _rowLabels.Clear();   // v2.16: 视觉行标签随重建刷新 (实时拖拽 HitTest 用)
         tbl.SuspendLayout();
         // 释放旧行控件（保留受管开关复用），避免多次刷新产生内存垃圾
         // v2.15: 倒序遍历 — 正序 foreach 中 Dispose 会把当前项移出集合,
@@ -520,7 +562,7 @@ public partial class MainForm : AntdUI.Window
                 TextAlign = ContentAlignment.MiddleLeft
             };
             tbl.Controls.Add(nt, 0, 0);
-            tbl.SetColumnSpan(nt, 3);
+            tbl.SetColumnSpan(nt, 4);
 
             AddRow(64F * k);
             var tip = new AntdUI.Label
@@ -535,7 +577,7 @@ public partial class MainForm : AntdUI.Window
                 TextMultiLine = true
             };
             tbl.Controls.Add(tip, 0, 1);
-            tbl.SetColumnSpan(tip, 3);
+            tbl.SetColumnSpan(tip, 4);
 
             tbl.ResumeLayout(true);
             tbl.PerformLayout();
@@ -556,29 +598,38 @@ public partial class MainForm : AntdUI.Window
         AddRow(28F * k);
         var hCap = new AntdUI.Label
         {
-            Text = "已安装插件（勾选 = 挂载；受管插件与自定义扩展均以开关控制，底部为玩家自定义扩展）",
+            Text = "已安装插件（勾选 = 挂载；行首手柄图标可拖拽调整加载顺序，底部为玩家自定义扩展）",
             Font = new Font("Microsoft YaHei UI", 8.5f * k),
             ForeColor = Color.FromArgb(120, 120, 128),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
         tbl.Controls.Add(hCap, 0, 0);
-        tbl.SetColumnSpan(hCap, 3);
+        tbl.SetColumnSpan(hCap, 4);
 
-        // ---- 受管插件行 ----
-        for (int i = 0; i < DllPlugins.Length; i++)
+        // ---- 受管插件行 ----（v2.16: 按 _managedOrder 渲染, 必选 GameNative 恒为首行;
+        //      拖拽插件"名称/说明"可调整顺序, 应用更改时按此顺序写入 GameGaurd.ini）
+        foreach (var mf in _managedOrder)
         {
+            int i = Array.FindIndex(DllPlugins, x => x.File.Equals(mf, StringComparison.OrdinalIgnoreCase));
+            if (i < 0) continue;
+            bool native = IsGameNative(DllPlugins[i].File);
             AddRow(38F * k);
             int row = tbl.RowCount - 1;
             var p = DllPlugins[i];
             var nm = new AntdUI.Label
             {
-                Text = IsGameNative(p.File) ? p.Name + "（必选）" : p.Name,
+                Text = native ? p.Name + "（必选）" : p.Name,
                 Font = new Font("Microsoft YaHei UI", 9.5f * k, FontStyle.Bold),
                 ForeColor = Style.Get(Colour.Text),   // 显式主题前景色：刷新重建后不依赖 Label 默认取色（避免文字失踪）
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
             };
+            if (!native)
+            {
+                nm.Tag = "M:" + p.File;   // HitTest 目标行标识 (v2.16: 拖拽只从行首手柄发起)
+                _rowLabels.Add(nm);
+            }
             var de = new AntdUI.Label
             {
                 Text = p.Desc + "（" + p.File + "）",
@@ -587,8 +638,9 @@ public partial class MainForm : AntdUI.Window
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
             };
-            tbl.Controls.Add(swDlls[i], 0, row);
-            tbl.Controls.Add(nm, 1, row);
+            if (!native) AddDragHandle(tbl, row, "M:" + p.File);   // v2.16: 行首拖拽手柄 (必选行无手柄 = 固定首位)
+            tbl.Controls.Add(swDlls[i], 1, row);
+            tbl.Controls.Add(nm, 2, row);
 
             // 有配置文件的插件 (AutoFire / DpsMeter / CombatPower): 行尾提供「编辑」按钮
             if (!string.IsNullOrEmpty(p.Config))
@@ -619,11 +671,11 @@ public partial class MainForm : AntdUI.Window
                 ed.Click += (s, e) => OpenIniEditor(cfg, pName);
                 cell3.Controls.Add(de, 0, 0);
                 cell3.Controls.Add(ed, 1, 0);
-                tbl.Controls.Add(cell3, 2, row);
+                tbl.Controls.Add(cell3, 3, row);
             }
             else
             {
-                tbl.Controls.Add(de, 2, row);
+                tbl.Controls.Add(de, 3, row);
             }
         }
 
@@ -641,7 +693,7 @@ public partial class MainForm : AntdUI.Window
                 TextAlign = ContentAlignment.MiddleLeft
             };
             tbl.Controls.Add(gCap, 0, gro);
-            tbl.SetColumnSpan(gCap, 3);
+            tbl.SetColumnSpan(gCap, 4);
 
             foreach (var f in custom)
             {
@@ -650,9 +702,11 @@ public partial class MainForm : AntdUI.Window
                 var exists = File.Exists(Path.Combine(_gr, f));
 
                 // 开关 = 当前挂载（条目在 GameGaurd.ini [Plugins] 中即勾选）
+                // 勾选状态沿用重建前的值; 新添加的文件 prevCustOn 里没有 → 默认勾选
+                bool custOn = !prevCustOn.TryGetValue(f, out var wasOn) || wasOn;
                 var sw = new AntdUI.Switch
                 {
-                    Checked = true,
+                    Checked = custOn,
                     Cursor = Cursors.Hand,
                     Size = new Size((int)(40f * k), (int)(22f * k)),
                     Margin = new Padding(6, 7, 0, 0),
@@ -675,6 +729,8 @@ public partial class MainForm : AntdUI.Window
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft
                 };
+                nm.Tag = "C:" + f;   // HitTest 目标行标识 (v2.16: 拖拽只从行首手柄发起)
+                _rowLabels.Add(nm);
                 var st = new AntdUI.Label
                 {
                     Text = exists ? "已挂载（文件在游戏根目录）" : "文件缺失（仅剩 GameGaurd.ini 条目）",
@@ -706,9 +762,10 @@ public partial class MainForm : AntdUI.Window
                 cell3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
                 cell3.Controls.Add(st, 0, 0);
                 cell3.Controls.Add(del, 1, 0);
-                tbl.Controls.Add(sw, 0, row);
-                tbl.Controls.Add(nm, 1, row);
-                tbl.Controls.Add(cell3, 2, row);
+                AddDragHandle(tbl, row, "C:" + f);   // v2.16: 行首拖拽手柄
+                tbl.Controls.Add(sw, 1, row);
+                tbl.Controls.Add(nm, 2, row);
+                tbl.Controls.Add(cell3, 3, row);
             }
         }
         else
@@ -724,7 +781,7 @@ public partial class MainForm : AntdUI.Window
                 TextAlign = ContentAlignment.MiddleLeft
             };
             tbl.Controls.Add(empty, 0, row);
-            tbl.SetColumnSpan(empty, 3);
+            tbl.SetColumnSpan(empty, 4);
         }
 
         tbl.ResumeLayout(true);
@@ -740,6 +797,163 @@ public partial class MainForm : AntdUI.Window
         tbl.Update();
         (tbl.Parent as AntdUI.In.Panel)?.Invalidate(true);
         _dllRowsBuilt = true;
+    }
+
+    // ================================================================
+    // v2.16: 插件行实时拖拽排序 (实现三版)
+    // 参考 AntdUI TabHeader.DragSort 的手动 HitTest 状态机, 不走 OLE DoDragDrop
+    // （OLE 拖放受焦点/权限影响且无法实时预览; 本方案拖动跨过其他行时立即换位）。
+    // 拖拽只从行首手柄发起 (AddDragHandle), 名称/说明文字不响应拖拽;
+    // 必选 GameNative 无手柄固定首位; 受管/自定义两组互不拖动。
+    // 手柄按下即持有隐式 Capture, Move/Up 全部路由到手柄自身 → AntdUI 按钮的
+    // 按压/悬停状态机自然复位, 不会出现"拖完按钮卡在按下态"。
+    // 拖拽全程不重建行 — 数据交换(si↔ti) + 原位交换单元格(SwapDllRowsVisual),
+    // 每次跨越仅一次轻量布局。(首版每次跨越整表重建 + 向下拖换位计算为无操作,
+    // 指针停在目标行内时每个 MouseMove 都触发重建, 又卡又慢, 已返工。)
+    // ================================================================
+
+    /* 行首拖拽手柄 — HolderOutlined(⠿ 六点阵) 图标明示可拖拽, 拖拽排序只从手柄发起 */
+    void AddDragHandle(TableLayoutPanel tbl, int row, string tag)
+    {
+        var hd = new AntdUI.Button
+        {
+            IconSvg = "HolderOutlined",
+            Type = TTypeMini.Default,          // 图标用次要色, 不喧宾夺主
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 3, 4, 3),
+            BorderWidth = 0F,                 // 无边框纯图标
+            WaveSize = 0,                     // 拖拽不播放点击波纹
+            Cursor = Cursors.SizeAll,
+            Tag = tag
+        };
+        hd.MouseDown += DllRowDragStart;
+        hd.MouseMove += DllHandleMouseMove;
+        hd.MouseUp += DllHandleMouseUp;
+        tbl.Controls.Add(hd, 0, row);
+    }
+
+    void DllRowDragStart(object sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left || _dllTbl == null) return;
+        var tag = (sender as Control)?.Tag as string;
+        if (string.IsNullOrEmpty(tag)) return;
+        if (tag.StartsWith("M:") && IsGameNative(tag.Substring(2))) return;   // 必选固定首位 (手柄本就不挂必选行, 双保险)
+        var c = (Control)sender;
+        _dragTag = tag;
+        _dragStartTbl = _dllTbl.PointToClient(c.PointToScreen(e.Location));
+        _dragActive = false;
+        // 不显式转 Capture: 按下的手柄自动持有隐式 Capture, Move/Up 路由到手柄;
+        // 拖拽全程不重建行, 手柄控件存活到松开, 原位换位不影响 Capture
+    }
+
+    void DllHandleMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dllTbl == null || string.IsNullOrEmpty(_dragTag)) return;
+        // 手柄持有 Capture, 坐标从手柄客户端换算到 tbl 坐标系 (阈值/HitTest 共用)
+        var pt = _dllTbl.PointToClient(((Control)sender).PointToScreen(e.Location));
+        if (!_dragActive)
+        {
+            if (Math.Abs(pt.X - _dragStartTbl.X) < 4 && Math.Abs(pt.Y - _dragStartTbl.Y) < 4) return;
+            _dragActive = true;
+            HighlightDragRow();   // 越过阈值即高亮; 拖拽中不重建行, 高亮随行控件保持
+        }
+
+        // HitTest: 光标所在视觉行（按名称标签 Y 区间; 必选行不在 _rowLabels, 自动跳过）
+        AntdUI.Label hit = null;
+        foreach (var lbl in _rowLabels)
+        {
+            if (lbl.IsDisposed || lbl.Tag == null) continue;
+            var b = lbl.Bounds;
+            if (pt.Y >= b.Top - 2 && pt.Y < b.Bottom + 2) { hit = lbl; break; }
+        }
+        if (hit == null) return;
+        var tgtTag = hit.Tag as string;
+        if (string.IsNullOrEmpty(tgtTag) || tgtTag == _dragTag) return;
+        bool srcM = _dragTag.StartsWith("M:", StringComparison.Ordinal);
+        bool tgtM = tgtTag.StartsWith("M:", StringComparison.Ordinal);
+        if (srcM != tgtM) return;   // 受管/自定义两组互不拖动
+        string src = _dragTag.Substring(2), tgt = tgtTag.Substring(2);
+        var cmp = StringComparison.OrdinalIgnoreCase;
+        int si, ti;
+        if (srcM)
+        {
+            if (IsGameNative(src) || IsGameNative(tgt)) return;
+            si = _managedOrder.FindIndex(x => x.Equals(src, cmp));
+            ti = _managedOrder.FindIndex(x => x.Equals(tgt, cmp));
+        }
+        else
+        {
+            si = _custRows.FindIndex(x => x.Equals(src, cmp));
+            ti = _custRows.FindIndex(x => x.Equals(tgt, cmp));
+        }
+        if (si < 0 || ti < 0 || si == ti) return;
+
+        // 视觉先行: 原位交换两行单元格(不重建控件), 成功后数据同步交换。
+        // 用"交换"而非"移除再插入" — 换位后被拖行正好落在光标所在行,
+        // 后续 Move 命中自身即返回, 不会在同一行内反复换位。
+        AntdUI.Label srcLbl = null;
+        foreach (var lbl in _rowLabels)
+            if (!lbl.IsDisposed && (lbl.Tag as string) == _dragTag) { srcLbl = lbl; break; }
+        if (srcLbl == null || !SwapDllRowsVisual(srcLbl, hit)) return;
+        if (srcM) (_managedOrder[si], _managedOrder[ti]) = (_managedOrder[ti], _managedOrder[si]);
+        else (_custRows[si], _custRows[ti]) = (_custRows[ti], _custRows[si]);
+    }
+
+    /* 原位交换两行的全部单元格(开关/名称/说明整行一起走), 不销毁不新建控件;
+       返回 false = 行号异常未交换(调用方据此不动数据, 保持视觉与数据一致) */
+    bool SwapDllRowsVisual(AntdUI.Label a, AntdUI.Label b)
+    {
+        var tbl = _dllTbl;
+        var pa = tbl.GetPositionFromControl(a);
+        var pb = tbl.GetPositionFromControl(b);
+        if (pa.Row < 0 || pb.Row < 0 || pa.Row == pb.Row) return false;
+        tbl.SuspendLayout();
+        for (int col = 0; col < tbl.ColumnCount; col++)
+        {
+            var x = tbl.GetControlFromPosition(col, pa.Row);
+            var y = tbl.GetControlFromPosition(col, pb.Row);
+            if (x == null || y == null || ReferenceEquals(x, y)) continue;
+            tbl.SetCellPosition(x, new TableLayoutPanelCellPosition(col, pb.Row));
+            tbl.SetCellPosition(y, new TableLayoutPanelCellPosition(col, pa.Row));
+        }
+        tbl.ResumeLayout(true);   // 单次布局; 控件位移自动触发各自重绘
+        return true;
+    }
+
+    void DllHandleMouseUp(object sender, MouseEventArgs e)
+    {
+        if (_dllTbl == null || string.IsNullOrEmpty(_dragTag)) return;
+        bool was = _dragActive;
+        _dragTag = null;
+        _dragActive = false;
+        if (_dragHl != null)
+        {
+            if (!_dragHl.IsDisposed) _dragHl.ForeColor = _dragHlPrev;   // 恢复原色(主题色/缺失红名)
+            _dragHl = null;
+        }
+        if (was)
+        {
+            // 视觉与数据在拖拽中已同步换位, 松开无需重建定稿
+            // (重建会把"已取消勾选、尚未应用"的自定义开关悄悄重置回勾选)
+            _orderDirty = true;
+            if (lbDllSt != null) lbDllSt.Text = "顺序已调整（未应用）：点击【应用更改】写入 GameGaurd.ini";
+        }
+    }
+
+    void HighlightDragRow()
+    {
+        // 拖拽中的行名称显示为高亮蓝; 记录高亮前前景色, 松开后恢复 (缺失文件的红名不受影响)
+        var tag = _dragTag;
+        foreach (var lbl in _rowLabels)
+        {
+            if (lbl.IsDisposed) continue;
+            if ((lbl.Tag as string) == tag)
+            {
+                _dragHl = lbl;
+                _dragHlPrev = lbl.ForeColor;
+                lbl.ForeColor = Ac;
+            }
+        }
     }
 
     /*
@@ -830,6 +1044,8 @@ public partial class MainForm : AntdUI.Window
         {
             var iniPath = Path.Combine(_gr, "GameGaurd.ini");
             existing.Add(file);
+            if (!_custRows.Contains(file, StringComparer.OrdinalIgnoreCase))
+                _custRows.Add(file);   // v2.16: 保持界面列表与 ini 同步（拖拽顺序不丢失）
             var enabled = new List<string>();
             for (int i = 0; i < DllPlugins.Length; i++)
                 if (swDlls[i].Checked) enabled.Add(DllPlugins[i].File);
@@ -892,6 +1108,7 @@ public partial class MainForm : AntdUI.Window
         try
         {
             RemovePluginFromIni(iniPath, file);
+            _custRows.RemoveAll(x => x.Equals(file, StringComparison.OrdinalIgnoreCase));   // v2.16
             Lg(">>> [DLL扩展] 已从 GameGaurd.ini 移除: " + file, Gn);
         }
         catch (Exception ex)
@@ -1014,6 +1231,15 @@ public partial class MainForm : AntdUI.Window
             if (IsGameNative(f) || swDlls[i].Checked)
                 enabled.Add(f);
         }
+        // v2.16: 按界面上的当前顺序写入 (含拖拽调整后的顺序; GameNative 恒为首位)
+        var enabledOrdered = new List<string>();
+        foreach (var f in _managedOrder)
+            if (enabled.Contains(f, StringComparer.OrdinalIgnoreCase))
+                enabledOrdered.Add(f);
+        foreach (var f in enabled)
+            if (!enabledOrdered.Contains(f, StringComparer.OrdinalIgnoreCase))
+                enabledOrdered.Add(f);
+        enabled = enabledOrdered;
 
         // 收集勾选的自定义扩展（行内开关）— 取消勾选 = 应用后从 [Plugins] 移除条目（文件保留）
         var customOn = new List<string>();
@@ -1039,7 +1265,8 @@ public partial class MainForm : AntdUI.Window
         try
         {
             var iniPath = Path.Combine(_gr, "GameGaurd.ini");
-            WriteIniText(iniPath, BuildPatchIni(iniPath, enabled, customOn));   // v2.15: 按原编码写回
+            WriteIniText(iniPath, BuildPatchIni(iniPath, enabled, customOn));   // v2.15: UTF-8 无 BOM
+            _orderDirty = false;   // v2.16: 顺序已写入 ini
             Lg(">>> [DLL扩展] 已直写 GameGaurd.ini: 受管插件 " + enabled.Count + " 个, 自定义扩展 " + customOn.Count + " 个", Gn);
             if (lbDllSt != null)
                 lbDllSt.Text = "已应用：受管插件 " + enabled.Count + " · 自定义扩展 " + customOn.Count + "（直写 GameGaurd.ini）";
@@ -1134,6 +1361,7 @@ public partial class MainForm : AntdUI.Window
             var keepCustom = GetNonManagedPlugins();
             WriteIniText(iniPath, BuildPatchIni(iniPath, enabled, keepCustom));   // v2.15: 按原编码写回
             _patchInstalled = true;   // 列表已写入 → 本页恢复显示插件列表
+            _orderDirty = false;      // v2.16: 顺序已随安装写入 ini
             RefreshDllState();
 
             if (failed.Count > 0)
@@ -1175,6 +1403,10 @@ public partial class MainForm : AntdUI.Window
      */
     string BuildPatchIni(string iniPath, List<string> enabled, List<string> extra = null)
     {
+        // v2.16: GameNative 基础挂载器强制 Plugin0; 受管插件在前, 自定义扩展按界面顺序追加在尾部
+        // (旧实现自定义条目排最前, 基础挂载器被排到自定义 DLL 之后导致部分插件加载失败)
+        int gn = enabled.FindIndex(x => x.Equals("GameNative.dll", StringComparison.OrdinalIgnoreCase));
+        if (gn > 0) { var g = enabled[gn]; enabled.RemoveAt(gn); enabled.Insert(0, g); }
         var managed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in DllPlugins) managed.Add(p.File);
 
@@ -1235,8 +1467,8 @@ public partial class MainForm : AntdUI.Window
             {
                 foreach (var c in sectionComments) sb.AppendLine(c);
                 int idx = 0;
-                foreach (var v in ext) sb.AppendLine("Plugin" + (idx++) + "=" + v);
                 foreach (var v in enabled) sb.AppendLine("Plugin" + (idx++) + "=" + v);
+                foreach (var v in ext) sb.AppendLine("Plugin" + (idx++) + "=" + v);
                 wrote = true;
             }
         }
@@ -1247,8 +1479,8 @@ public partial class MainForm : AntdUI.Window
             sb.AppendLine("[Plugins]");
             sb.AppendLine("; 由 ServerUI【DLL扩展】页面管理");
             int idx = 0;
-            foreach (var v in ext) sb.AppendLine("Plugin" + (idx++) + "=" + v);
             foreach (var v in enabled) sb.AppendLine("Plugin" + (idx++) + "=" + v);
+            foreach (var v in ext) sb.AppendLine("Plugin" + (idx++) + "=" + v);
         }
         return sb.ToString().TrimEnd() + "\r\n";
     }
