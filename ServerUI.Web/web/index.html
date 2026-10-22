@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'; form-action 'none'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>ServerS4A21 管理器 v2.20 · ServerS4A21-AUM</title>
+<link rel="icon" type="image/png" href="assets/app-icon.png">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/shell.css">
+<link rel="stylesheet" href="css/widgets.css">
+<link rel="stylesheet" href="css/pages.css">
+<link rel="stylesheet" href="css/archive.css">
+<link rel="stylesheet" href="css/dll.css">
+<link rel="stylesheet" href="css/pages3.css">
+<link rel="stylesheet" href="css/overlays.css">
+<link rel="stylesheet" href="css/log.css">
+<link rel="stylesheet" href="css/modes.css">
+</head>
+<body>
+
+<div class="app" data-mode="full">
+
+  <!-- ================= 标题栏 ================= -->
+  <header class="titlebar">
+    <img class="brand-icon" src="assets/app-icon.png" alt="" width="18" height="18" draggable="false">
+    <span class="tb-title">ServerS4A21 管理器</span>
+    <span class="tb-ver" id="tbVer" data-tip="点击切换深色 / 浅色主题">v2.20 · ServerS4A21-AUM</span>
+    <div class="tb-drag" id="tbDrag"></div>
+    <div class="tb-right">
+      <span class="status-pill bad" id="statusPill" data-tip="服务端运行状态">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="pill-text" id="statusPillText">未运行</span>
+      </span>
+      <button class="tb-mode" id="btnClassic" type="button" data-tip="经典界面" aria-label="经典界面" aria-pressed="false">典</button>
+      <button class="tb-mode" id="btnMini" type="button" data-tip="简洁界面" aria-label="简洁界面" aria-pressed="false">简</button>
+    </div>
+    <div class="tb-btns">
+      <button class="tb-btn" id="tbTheme" type="button" data-tip="切换深色 / 浅色主题" aria-label="切换主题">
+        <svg aria-hidden="true"><use href="assets/icons.svg#i-moon"></use></svg>
+      </button>
+      <button class="tb-btn" id="tbMin" type="button" data-tip="最小化" aria-label="最小化">
+        <svg aria-hidden="true"><use href="assets/icons.svg#i-minus"></use></svg>
+      </button>
+      <button class="tb-btn" id="tbMax" type="button" data-tip="最大化" aria-label="最大化">
+        <svg aria-hidden="true"><use href="assets/icons.svg#i-max"></use></svg>
+      </button>
+      <button class="tb-btn close" id="tbClose" type="button" data-tip="关闭" aria-label="关闭">
+        <svg aria-hidden="true"><use href="assets/icons.svg#i-close"></use></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= 侧栏 + 内容 ================= -->
+  <div class="body">
+    <nav class="sidebar" id="sidebar" aria-label="主导航"></nav>
+    <main class="content" id="content">
+      <section class="page" id="page" role="main"></section>
+    </main>
+  </div>
+
+  <!-- ================= 日志分隔（§6.4） ================= -->
+  <div class="log-resizer" id="logResizer" role="separator" aria-label="调整日志面板高度" data-tip="拖动调整日志高度（双击复位）" tabindex="-1">
+    <div class="grip"></div>
+  </div>
+
+  <!-- ================= 日志面板 ================= -->
+  <div class="log-wrap" id="logWrap">
+    <div class="log-panel">
+      <div class="progress-strip hidden" id="logProgress"><div class="bar" id="logProgressBar"></div></div>
+      <div class="log-toolbar">
+        <span class="lt-bar" aria-hidden="true"></span>
+        <span class="lt-title">运行日志</span>
+        <span class="lt-sep" aria-hidden="true"></span>
+        <span id="logSwitches" class="lt-switches"></span>
+        <span class="lt-spacer"></span>
+        <span class="progress-label" id="logProgressLabel"></span>
+        <div class="lt-actions">
+          <button class="btn sm ghost" id="logCopy" type="button" data-tip="复制全部日志到剪贴板">
+            <svg aria-hidden="true"><use href="assets/icons.svg#i-copy"></use></svg>
+            <span>复制日志</span>
+          </button>
+          <button class="btn sm ghost" id="logClear" type="button" data-tip="清空日志内容">
+            <svg aria-hidden="true"><use href="assets/icons.svg#i-trash"></use></svg>
+            <span>清空日志</span>
+          </button>
+          <button class="icon-btn" id="logCollapse" type="button" data-tip="折叠 / 展开日志" aria-label="折叠或展开日志">
+            <svg aria-hidden="true"><use href="assets/icons.svg#i-chevron-down"></use></svg>
+          </button>
+        </div>
+      </div>
+      <div class="log-body sel" id="logBody" role="log" aria-live="polite">
+        <div class="log-empty" id="logEmpty">暂无日志。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 启动遮罩（与 WPF 宿主启动动画同一套视觉） ================= -->
+  <div class="splash" id="splash">
+    <div class="sp-stage">
+      <div class="sp-ring">
+        <svg class="sp-arc" viewBox="0 0 78 78" aria-hidden="true">
+          <circle cx="39" cy="39" r="37" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-dasharray="28 204" class="sp-arc-dash"/>
+        </svg>
+        <div class="sp-mark">S</div>
+      </div>
+      <div class="sp-title">ServerS4A21 管理器</div>
+      <div class="sp-sub" id="splashSub">正在启动界面…</div>
+      <div class="sp-track"><div class="sp-bar" id="splashBar"></div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-host" id="toastHost"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -47,6 +47,7 @@ public partial class MainForm : AntdUI.Window
     AntdUI.Label _dragHl;                // 拖拽高亮中的名称标签 (松开时恢复原色)
     Color? _dragHlPrev;                  // 高亮前的前景色 (AntdUI 为可空色; 主题色/缺失红名)
     readonly List<AntdUI.Label> _rowLabels = new();   // 视觉行名称标签 (实时 HitTest 用, 重建时刷新)
+    readonly List<(AntdUI.Label lb, bool danger)> _dllNameLabels = new();  // 行名 (明暗切换时重刷颜色)
 
 
     // 客户端补丁受管理的插件 — 对应 客户端补丁.zip 内 GameGaurd.ini [Plugins] 列表
@@ -73,37 +74,23 @@ public partial class MainForm : AntdUI.Window
     // ================================================================
     void BuildDllPage()
     {
-        pgDll.Padding = new Padding(10);
+        pgDll.Padding = new Padding(12, 8, 12, 10);
         var d = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1, RowCount = 4,
             BackColor = Color.Transparent
         };
-        d.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));   // 信息栏
+        d.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));   // 页面标题 + 操作
         d.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 插件列表 (可滚动)
         d.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));   // 操作行
         d.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));   // 状态行
         pgDll.Controls.Add(d);
 
         // ============================================================
-        // ★ 信息栏 ★ (参考存档管理页信息栏: 标签 + 右侧按钮)
+        // ★ 页头 ★ — 标题/说明 + 常用操作 (打开补丁包目录 / 刷新状态)
+        // (旧实现是一行灰色说明文字 + 两个按钮, 信息密度低且与其它页面不一致)
         // ============================================================
-        var ib = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3, RowCount = 1,
-            BackColor = Color.Transparent,
-            Margin = new Padding(4, 2, 4, 0)
-        };
-        ib.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        ib.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140F));
-        ib.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
-        ib.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-        var lbInfo = L("客户端补丁挂载 · 参考 S4A21ClientPatch（勾选插件 = 写入 GameGaurd.ini 挂载）", 9f);
-        lbInfo.ForeColor = Color.FromArgb(140, 140, 148);
-
         var btOpenZip = B("打开补丁包目录", TTypeMini.Default, "FolderOpenOutlined");
         btOpenZip.Click += (s, e) =>
         {
@@ -116,10 +103,9 @@ public partial class MainForm : AntdUI.Window
         var btRf = B("刷新状态", TTypeMini.Default, "ReloadOutlined");
         btRf.Click += (s, e) => RefreshDllState();
 
-        ib.Controls.Add(lbInfo, 0, 0);
-        ib.Controls.Add(btOpenZip, 1, 0);
-        ib.Controls.Add(btRf, 2, 0);
-        d.Controls.Add(ib, 0, 0);
+        d.Controls.Add(PageHead("DLL 扩展",
+            "客户端补丁挂载 · 勾选即写入 GameGaurd.ini 的 [Plugins] 列表（顺序生效）",
+            btOpenZip, btRf), 0, 0);
 
         // ============================================================
         // ★ 插件列表卡片 ★ — 可滚动 (参考使用说明页滚动结构)
@@ -203,7 +189,7 @@ public partial class MainForm : AntdUI.Window
         var lbOp = new AntdUI.Label
         {
             Text = "添加扩展 = 选择自己的插件挂载（复制到游戏根目录 + 写入 GameGaurd.ini）；删除扩展 = 移除已挂载的自定义插件；自定义扩展行有开关，取消勾选后应用 = 从列表移除（文件保留）；拖动行首的手柄图标可调整加载顺序（必选项固定首位），调整后点击应用更改",
-            Font = new Font("Microsoft YaHei UI", 8.5f),
+            Font = F(8.5f),
             ForeColor = Color.FromArgb(130, 130, 138),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -231,7 +217,7 @@ public partial class MainForm : AntdUI.Window
      * 未安装 DLL 扩展（游戏根目录无挂载器文件且无 [Plugins] 记录）时:
      *   不显示任何"已安装插件" — 列表只显示空态提示, 开关全部置灰
      */
-    void RefreshDllState()
+    void RefreshDllState(bool forceRebuild = false)
     {
         _dllSyncing = true;
         try
@@ -305,7 +291,12 @@ public partial class MainForm : AntdUI.Window
             // （DllPlugins 数组 + custom 列表）, 刷新只同步开关状态, 控件树保留 → 文字永不丢失。
             bool patchChanged = _patchInstalled != _lastPatchInstalled;
             _lastPatchInstalled = _patchInstalled;
-            bool listChanged = !_dllRowsBuilt
+            // forceRebuild: 由「添加扩展 / 删除扩展」等已改动 GameGaurd.ini 的调用方指定。
+            // 变化检测只比较"ini 里的自定义条目"与"_custRows"的数量/顺序, 而添加扩展在
+            // 调用本方法前就已把文件写入 ini（并以同一次写入同步过 _custRows）→ 两边永远
+            // 相等 → listChanged 恒为 false → 新行不重建、界面看不到刚添加的扩展;
+            // 删除扩展同理（行已删, 界面仍留）。故这类"外部已改 ini"的场景必须强制重建。
+            bool listChanged = forceRebuild || !_dllRowsBuilt
                 || patchChanged
                 || (!_orderDirty && (custom.Count != _custRows.Count
                     || !custom.SequenceEqual(_custRows, StringComparer.OrdinalIgnoreCase)));
@@ -338,7 +329,8 @@ public partial class MainForm : AntdUI.Window
                     : "受管插件已启用 " + on + " / " + DllPlugins.Length
                         + " · 自定义扩展 已勾选 " + onCust + " / " + custom.Count + " → GameGaurd.ini";
             Lg(!_patchInstalled
-                ? ">>> [DLL扩展] 未安装：游戏根目录未发现补丁文件（挂载器/插件列表均无）"
+                ? ">>> [DLL扩展] 未安装：游戏根目录未发现补丁文件（挂载器/插件列表均无）；ini="
+                    + iniPath + " 存在=" + File.Exists(iniPath)
                 : ">>> [DLL扩展] 已刷新: 受管插件 " + on + " 个已启用, 自定义扩展 " + onCust + " 个已勾选", Txt2);
         }
         catch (Exception ex)
@@ -347,6 +339,33 @@ public partial class MainForm : AntdUI.Window
             if (lbDllSt != null) lbDllSt.Text = "读取 GameGaurd.ini 失败";
         }
         finally { _dllSyncing = false; }
+    }
+
+    /*
+     * 明暗主题切换后重刷插件行名称颜色
+     * 行名是运行期重建的, 不会跟随窗体整体的默认取色; 用不透明色避免 AntdUI 对半透明
+     * 文字色的处理差异, 并主动标脏。
+     */
+    internal void DllThemeSync()
+    {
+        try
+        {
+            var txt = Config.IsLight ? Color.FromArgb(24, 24, 28) : Color.FromArgb(240, 240, 245);
+            // 列表表格自身是不透明主题色 (防滚动残影), 也必须跟随主题,
+            // 否则浅色主题下整块列表仍是深色底
+            if (_dllTbl != null && !_dllTbl.IsDisposed)
+            {
+                _dllTbl.BackColor = Style.Get(Colour.BgContainer);
+                _dllTbl.Invalidate();
+            }
+            foreach (var (lb, danger) in _dllNameLabels)
+            {
+                if (lb == null || lb.IsDisposed) continue;
+                lb.ForeColor = danger ? Rd : txt;
+                lb.Invalidate();
+            }
+        }
+        catch { }
     }
 
     /* 是否内置受管插件 (客户端补丁 7 个) */
@@ -508,12 +527,15 @@ public partial class MainForm : AntdUI.Window
         var prevCustOn = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         foreach (var kv in _swCust) prevCustOn[kv.Key] = kv.Value.Checked;
         _swCust.Clear();
-        // 运行期重建表格时按窗体 AutoScale 因子补偿字体/控件尺寸:
-        // AutoScaleMode.Font 只缩放首次创建的控件, 重建的新控件若不补偿会整体变小（界面/字体缩小）
+        // 运行期重建表格时按窗体 AutoScale 因子补偿控件尺寸:
+        // AutoScaleMode.Font 只缩放首次创建的控件, 重建的新控件若不补偿会整体变小（界面缩小）
         // v2.15: 运行期重建控件的缩放因子 — 从"已被窗体 AutoScale 的启动控件"实测推导,
         // 保证重建行与首批控件用同一真实比例。旧实现用 DeviceDpi/96 且只缩放字体、
         // 不缩放行高/列宽 → 4K 高 DPI 下添加自定义 DLL 触发重建时"字变大、行高不变",
         // 内容被行高裁切, 表现为排版缩小/文字消失
+        // ⚠ k 只能用于"像素"尺寸 (行高 / 列宽 / 开关 Size); 绝不能乘到 Font 的点数上:
+        //   点数字号本身已随系统 DPI 缩放, 再乘 k 就是双重放大 → 添加扩展后字体明显变大
+        //   (首次构建时 k≈1 故正常, 一旦重建 k>1 字号就被放大)
         float k = 1f;
         try
         {
@@ -526,6 +548,7 @@ public partial class MainForm : AntdUI.Window
         if (k < 0.75f) k = 0.75f;
         if (k > 4f) k = 4f;
         _rowLabels.Clear();   // v2.16: 视觉行标签随重建刷新 (实时拖拽 HitTest 用)
+        _dllNameLabels.Clear();
         tbl.SuspendLayout();
         // 释放旧行控件（保留受管开关复用），避免多次刷新产生内存垃圾
         // v2.15: 倒序遍历 — 正序 foreach 中 Dispose 会把当前项移出集合,
@@ -556,7 +579,7 @@ public partial class MainForm : AntdUI.Window
             var nt = new AntdUI.Label
             {
                 Text = "—— 未安装 DLL 扩展 ——",
-                Font = new Font("Microsoft YaHei UI", 10f * k, FontStyle.Bold),
+                Font = F(10f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(150, 150, 158),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -570,7 +593,7 @@ public partial class MainForm : AntdUI.Window
                 Text = "游戏根目录尚未安装客户端补丁（未发现挂载器 GameGaurd.dll / az.dll，且 GameGaurd.ini 无插件记录）。\n\n"
                     + "请到【设置与关于】页点击【新DLL安装】，把 客户端补丁.zip 完整安装到游戏根目录；\n"
                     + "安装完成后本页会自动显示插件列表。",
-                Font = new Font("Microsoft YaHei UI", 8.5f * k),
+                Font = F(8.5f),
                 ForeColor = Color.FromArgb(120, 120, 128),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
@@ -599,7 +622,7 @@ public partial class MainForm : AntdUI.Window
         var hCap = new AntdUI.Label
         {
             Text = "已安装插件（勾选 = 挂载；行首手柄图标可拖拽调整加载顺序，底部为玩家自定义扩展）",
-            Font = new Font("Microsoft YaHei UI", 8.5f * k),
+            Font = F(8.5f),
             ForeColor = Color.FromArgb(120, 120, 128),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -620,11 +643,12 @@ public partial class MainForm : AntdUI.Window
             var nm = new AntdUI.Label
             {
                 Text = native ? p.Name + "（必选）" : p.Name,
-                Font = new Font("Microsoft YaHei UI", 9.5f * k, FontStyle.Bold),
-                ForeColor = Style.Get(Colour.Text),   // 显式主题前景色：刷新重建后不依赖 Label 默认取色（避免文字失踪）
+                Font = F(9.5f, FontStyle.Bold),
+                ForeColor = Style.Get(Colour.Text),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
             };
+            _dllNameLabels.Add((nm, false));
             if (!native)
             {
                 nm.Tag = "M:" + p.File;   // HitTest 目标行标识 (v2.16: 拖拽只从行首手柄发起)
@@ -633,7 +657,7 @@ public partial class MainForm : AntdUI.Window
             var de = new AntdUI.Label
             {
                 Text = p.Desc + "（" + p.File + "）",
-                Font = new Font("Microsoft YaHei UI", 8.5f * k),
+                Font = F(8.5f),
                 ForeColor = Color.FromArgb(130, 130, 138),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -687,7 +711,7 @@ public partial class MainForm : AntdUI.Window
             var gCap = new AntdUI.Label
             {
                 Text = "—— 自定义扩展（开关 = 挂载，行尾可删除）——",
-                Font = new Font("Microsoft YaHei UI", 8.5f * k),
+                Font = F(8.5f),
                 ForeColor = Color.FromArgb(140, 140, 148),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -724,17 +748,18 @@ public partial class MainForm : AntdUI.Window
                 var nm = new AntdUI.Label
                 {
                     Text = f,
-                    Font = new Font("Microsoft YaHei UI", 9.5f * k, FontStyle.Bold),   // 与受管行名称同字号（按窗体缩放因子补偿）
+                    Font = F(9.5f, FontStyle.Bold),   // 与受管行名称同字号（字号不乘 k, 见 RebuildDllRows 说明）
                     ForeColor = exists ? Style.Get(Colour.Text) : Rd,
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft
                 };
+                _dllNameLabels.Add((nm, !exists));
                 nm.Tag = "C:" + f;   // HitTest 目标行标识 (v2.16: 拖拽只从行首手柄发起)
                 _rowLabels.Add(nm);
                 var st = new AntdUI.Label
                 {
                     Text = exists ? "已挂载（文件在游戏根目录）" : "文件缺失（仅剩 GameGaurd.ini 条目）",
-                    Font = new Font("Microsoft YaHei UI", 8.5f * k),
+                    Font = F(8.5f),
                     ForeColor = exists ? Color.FromArgb(130, 130, 138) : Rd,
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft
@@ -775,7 +800,7 @@ public partial class MainForm : AntdUI.Window
             var empty = new AntdUI.Label
             {
                 Text = "—— 暂无自定义扩展（点击下方【添加扩展】挂载自己的插件）——",
-                Font = new Font("Microsoft YaHei UI", 8.5f * k),
+                Font = F(8.5f),
                 ForeColor = Color.FromArgb(120, 120, 128),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft
@@ -1051,7 +1076,9 @@ public partial class MainForm : AntdUI.Window
                 if (swDlls[i].Checked) enabled.Add(DllPlugins[i].File);
             WriteIniText(iniPath, BuildPatchIni(iniPath, enabled, existing));   // v2.15: 按原编码写回
             Lg(">>> [DLL扩展] 已挂载自定义扩展: " + file + " → GameGaurd.ini", Gn);
-            RefreshDllState();
+            // 强制重建 — 本方法已先改 ini, 刷新时"ini 与 _custRows 一致"恒成立,
+            // 走变化检测不会重建, 新添加的扩展不会出现在列表里
+            RefreshDllState(true);
         }
         catch (Exception ex)
         {
@@ -1137,7 +1164,9 @@ public partial class MainForm : AntdUI.Window
                 }
             }
         }
-        RefreshDllState();
+        // 强制重建 — 条目已在 RemovePluginFromIni 中删除, 走变化检测时
+        // ini 与 _custRows 已被同步修改, 不会重建 → 已删除的行仍留在界面上
+        RefreshDllState(true);
     }
 
     /*
@@ -1504,7 +1533,7 @@ internal class DllPickForm : AntdUI.Window
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
         ShowInTaskbar = false;
-        Font = new Font("Microsoft YaHei UI", 9F);
+        Font = MainForm.F(9F);
         ClientSize = new Size(480, 400);
 
         // 插件列表 — 主题色跟随 ServerUI 深浅色主题
@@ -1514,9 +1543,8 @@ internal class DllPickForm : AntdUI.Window
             Margin = new Padding(18, 14, 18, 12),
             IntegralHeight = false,
             HorizontalScrollbar = true,
-            Font = new Font("Microsoft YaHei UI", 9.5F),
+            Font = MainForm.F(9.5F),
             BackColor = Style.Get(Colour.BgContainer),
-            ForeColor = Style.Get(Colour.Text),
             BorderStyle = BorderStyle.None
         };
         foreach (var it in items) _lb.Items.Add(it);
@@ -1545,7 +1573,7 @@ internal class DllPickForm : AntdUI.Window
             Text = "提示：双击列表项，或选中后点击【删除】",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Microsoft YaHei UI", 8.5F),
+            Font = MainForm.F(8.5F),
             ForeColor = Style.Get(Colour.TextSecondary)
         };
 
@@ -1664,7 +1692,7 @@ internal class IniEditorForm : AntdUI.Window
         _title = title;
         StartPosition = FormStartPosition.CenterParent;
         ShowInTaskbar = false;
-        Font = new Font("Microsoft YaHei UI", 9F);
+        Font = MainForm.F(9F);
         ClientSize = new Size(940, 620);
         _path = path;
 
@@ -1685,7 +1713,7 @@ internal class IniEditorForm : AntdUI.Window
             Text = "直接调节：开关 = 启用/关闭 · 数字 = 上下箭头微调 · 文本框 = 填写内容 · 灰色小字是原配置注释。分组标题行可「添加键 / 删除分组」，键行行尾可「删除」；保存后自动转回 ini 格式",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Microsoft YaHei UI", 8.5F),
+            Font = MainForm.F(8.5F),
             ForeColor = Style.Get(Colour.TextSecondary)
         };
         var btAddGroup = new AntdUI.Button
@@ -1737,7 +1765,7 @@ internal class IniEditorForm : AntdUI.Window
             Text = "保存位置：游戏根目录 → " + path + (exists ? "" : "（新文件，不存在时将自动创建）"),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Microsoft YaHei UI", 8.5F),
+            Font = MainForm.F(8.5F),
             ForeColor = Style.Get(Colour.TextSecondary)
         };
 
@@ -1866,8 +1894,7 @@ internal class IniEditorForm : AntdUI.Window
                     Text = il.Key,
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft,
-                    Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold),
-                    ForeColor = Style.Get(Colour.Text),
+                    Font = MainForm.F(9F, FontStyle.Bold),
                     Margin = new Padding(18, 0, 0, 0)
                 };
 
@@ -1897,7 +1924,7 @@ internal class IniEditorForm : AntdUI.Window
                         Height = 30,
                         Anchor = AnchorStyles.Left,
                         Margin = new Padding(8, 4, 0, 0),
-                        Font = new Font("Microsoft YaHei UI", 9.5F)
+                        Font = MainForm.F(9.5F)
                     };
                     il.Ctl = new RowCtl { Num = num };
                     tbl.Controls.Add(lbKey, 0, row);
@@ -1910,7 +1937,7 @@ internal class IniEditorForm : AntdUI.Window
                         Text = il.Value,
                         Dock = DockStyle.Fill,
                         Radius = 6,
-                        Font = new Font("Microsoft YaHei UI", 9.5F),
+                        Font = MainForm.F(9.5F),
                         Margin = new Padding(8, 3, 0, 3)
                     };
                     il.Ctl = new RowCtl { Txt = txt };
@@ -1956,7 +1983,7 @@ internal class IniEditorForm : AntdUI.Window
                     var lbCm = new AntdUI.Label
                     {
                         Text = t,
-                        Font = new Font("Microsoft YaHei UI", 8.5F),
+                        Font = MainForm.F(8.5F),
                         ForeColor = Style.Get(Colour.TextTertiary),
                         Dock = DockStyle.Fill,
                         TextAlign = ContentAlignment.MiddleLeft,
@@ -1991,7 +2018,7 @@ internal class IniEditorForm : AntdUI.Window
         var lb = new AntdUI.Label
         {
             Text = "▍ " + capName,
-            Font = new Font("Microsoft YaHei UI", 10.5F, FontStyle.Bold),
+            Font = MainForm.F(10.5F, FontStyle.Bold),
             ForeColor = Style.Get(Colour.Primary),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -2300,7 +2327,7 @@ internal class IniAskForm : AntdUI.Window
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
         ShowInTaskbar = false;
-        Font = new Font("Microsoft YaHei UI", 9F);
+        Font = MainForm.F(9F);
         bool two = !string.IsNullOrEmpty(label2);
         ClientSize = new Size(440, two ? 240 : 190);
 
@@ -2321,14 +2348,13 @@ internal class IniAskForm : AntdUI.Window
             Text = label1,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Microsoft YaHei UI", 9F),
-            ForeColor = Style.Get(Colour.Text)
+            Font = MainForm.F(9F),
         };
         _in1 = new AntdUI.Input
         {
             Dock = DockStyle.Fill,
             Radius = 6,
-            Font = new Font("Microsoft YaHei UI", 9.5F),
+            Font = MainForm.F(9.5F),
             Margin = new Padding(8, 2, 0, 2)
         };
         main.Controls.Add(lb1, 0, 0);
@@ -2343,14 +2369,13 @@ internal class IniAskForm : AntdUI.Window
                 Text = label2,
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Font = new Font("Microsoft YaHei UI", 9F),
-                ForeColor = Style.Get(Colour.Text)
+                Font = MainForm.F(9F),
             };
             _in2 = new AntdUI.Input
             {
                 Dock = DockStyle.Fill,
                 Radius = 6,
-                Font = new Font("Microsoft YaHei UI", 9.5F),
+                Font = MainForm.F(9.5F),
                 Margin = new Padding(8, 2, 0, 2)
             };
             main.Controls.Add(lb2, 0, 2);

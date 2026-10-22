@@ -1,0 +1,47 @@
+/* ==========================================================================
+   log.css — 日志面板细节（行悬停 / 跟随最新 / 级别筛选 / 字数）
+   面板骨架尺寸见 shell.css
+   ========================================================================== */
+
+.log-line {
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.log-line:hover { background: var(--log-hover); }
+
+/* 选中态用主题色，避免默认蓝底白字在深色下刺眼 */
+.log-body ::selection { background: var(--primary); color: #FFFFFF; }
+
+/* 日志面板工具条右侧：自动跟随 / 清空 */
+.log-toolbar .lt-actions { display: flex; align-items: center; gap: 4px; }
+
+/* “跳到最新”浮动按钮：仅当用户上滚且不在底部时出现 */
+.log-jump {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  height: 26px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  z-index: 5;
+}
+.log-jump svg { width: 11px; height: 11px; }
+.log-jump:hover { color: var(--text); border-color: var(--primary); }
+.log-wrap { position: relative; }
+
+/* 字数 / 级别统计 */
+.log-meta {
+  font-size: var(--fs-small);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.log-meta .lv-error { color: var(--danger); }
+.log-meta .lv-warning { color: var(--warning); }

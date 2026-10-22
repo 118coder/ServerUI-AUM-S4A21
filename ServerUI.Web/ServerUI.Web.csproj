@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <LangVersion>latest</LangVersion>
+    <!--
+      旧工程 (..\ServerUI\*.cs) 以只读方式链接进来编译, 因此这里保持与旧工程一致的编译面:
+      不启用 Nullable / ImplicitUsings —— 否则旧代码会产生大量新的 null 警告,
+      也会和 System.Windows.Forms 的隐式 using 冲突 (Timer / Application / MessageBox 等)。
+    -->
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!--
+      WFO0003: WinForms 分析器要求把 DPI 设置从 app.manifest 移到 ApplicationHighDpiMode 属性。
+      但任务书 §5.1 明确要求 manifest 里写 PerMonitorV2（旧工程也是走 manifest + SetHighDpiMode），
+      本项目不使用任何 WinForms 类型，只是按 §3.1 保留 UseWindowsForms=true，故定向抑制这一条提示。
+    -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <AssemblyName>ServerUI</AssemblyName>
+    <RootNamespace>ServerUI.Web</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\ServerUI\图标EXE.ico</ApplicationIcon>
+    <Version>2.20</Version>
+    <AssemblyVersion>2.20.0.0</AssemblyVersion>
+    <FileVersion>2.20.0.0</FileVersion>
+    <InformationalVersion>2.20</InformationalVersion>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+    <WebZipName>ServerUI.Web.web.zip</WebZipName>
+  </PropertyGroup>
+
+  <!-- ============================================================
+       旧工程源码：只读链接（绝不修改旧工程目录）
+       ============================================================ -->
+  <ItemGroup>
+    <Compile Include="..\ServerUI\Services\**\*.cs" Link="Services\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\ServerUI\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\ServerUI\Compat.cs" Link="Compat.cs" />
+    <Compile Include="..\ServerUI\TimeTool.cs" Link="TimeTool.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <!-- web\ 目录不打进 None 输出（它只以嵌入 zip 的形式随 exe 发布） -->
+  <ItemGroup>
+    <None Remove="web\**\*" />
+  </ItemGroup>
+
+  <!-- ============================================================
+       web\ → 嵌入资源 ServerUI.Web.web.zip
+       启动时解压到 %LOCALAPPDATA%\ServerUI.Web\web\<hash>,
+       再用 SetVirtualHostNameToFolderMapping 映射为 https://app.serverui/
+       ============================================================ -->
+  <Target Name="ZipWebAssets" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <WebZipPath>$(IntermediateOutputPath)$(WebZipName)</WebZipPath>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Exec Condition="Exists('$(MSBuildProjectDirectory)\web')"
+          Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$src = Join-Path '$(MSBuildProjectDirectory)' 'web'; $dst = '$(WebZipPath)'; if (Test-Path $dst) { Remove-Item $dst -Force }; Compress-Archive -Path (Join-Path $src '*') -DestinationPath $dst -Force&quot;" />
+    <ItemGroup Condition="Exists('$(WebZipPath)')">
+      <EmbeddedResource Include="$(WebZipPath)">
+        <LogicalName>$(WebZipName)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
+
+</Project>

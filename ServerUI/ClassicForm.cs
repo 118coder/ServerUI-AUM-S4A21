@@ -75,7 +75,7 @@ public partial class ClassicForm : AntdUI.Window
         StartPosition = FormStartPosition.CenterScreen;
         ControlBox = false;
         Text = "ServerS4A21 管理器 v" + MainForm.VER;   // 经典模式
-        Font = new Font("Microsoft YaHei UI", 10f);
+        Font = MainForm.F(10f);
 
         // 拖放支持 — 拖 .db 文件到窗口任意位置换挡
         AllowDrop = true;
@@ -205,7 +205,7 @@ public partial class ClassicForm : AntdUI.Window
         var title = new AntdUI.Label
         {
             Text = "经典模式 · ServerS4A21 管理器 v" + MainForm.VER,
-            Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold),
+            Font = MainForm.F(12f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Cursor = Cursors.Hand
@@ -295,7 +295,7 @@ public partial class ClassicForm : AntdUI.Window
         lbStatus = new AntdUI.Label
         {
             Text = "● 服务端未运行",
-            Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold),
+            Font = MainForm.F(9.5f, FontStyle.Bold),
             ForeColor = Rd,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -303,7 +303,7 @@ public partial class ClassicForm : AntdUI.Window
         lbPvf = new AntdUI.Label
         {
             Text = "PVF: ● 检测中",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = MainForm.F(9f),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -311,7 +311,7 @@ public partial class ClassicForm : AntdUI.Window
         lbVe = new AntdUI.Label
         {
             Text = "版本: --",
-            Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold),
+            Font = MainForm.F(9.5f, FontStyle.Bold),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight
@@ -319,7 +319,7 @@ public partial class ClassicForm : AntdUI.Window
         lbLu = new AntdUI.Label
         {
             Text = "上次更新: 尚未识别",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = MainForm.F(9f),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight   // 文字贴到容器右边缘
@@ -492,14 +492,14 @@ public partial class ClassicForm : AntdUI.Window
         lbCu = new AntdUI.Label
         {
             Text = "当前: --",
-            Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold),
+            Font = MainForm.F(10f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
         lbBk = new AntdUI.Label
         {
             Text = "备份数: 0",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = MainForm.F(9f),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -530,7 +530,7 @@ public partial class ClassicForm : AntdUI.Window
         var swLb = new AntdUI.Label
         {
             Text = "清理冗余DB",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = MainForm.F(9f),
             ForeColor = Txt2,
             AutoSize = false,
             Size = new Size(96, 26),
@@ -666,7 +666,7 @@ public partial class ClassicForm : AntdUI.Window
         var lbDr = new AntdUI.Label
         {
             Text = "📁 拖拽 .db 文件到此处 = 快速替换存档 (双击 = 储存当前)",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = MainForm.F(9f),
             ForeColor = Txt2,
             TextAlign = ContentAlignment.MiddleCenter,
             Dock = DockStyle.Fill
@@ -686,7 +686,7 @@ public partial class ClassicForm : AntdUI.Window
         {
             Dock = DockStyle.Fill,
             Radius = 8,
-            Shadow = 2,
+            Shadow = 0,   // 与主窗体一致: 阴影绘制开销大, 用描边代替
             BorderWidth = 1.2F,
             BorderColor = CardBorder,
             Margin = new Padding(0, 8, 0, 0)
@@ -710,7 +710,7 @@ public partial class ClassicForm : AntdUI.Window
         var lbTitle = new AntdUI.Label
         {
             Text = "运行日志",
-            Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold),
+            Font = MainForm.F(9.5f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -718,7 +718,7 @@ public partial class ClassicForm : AntdUI.Window
         {
             Text = "",
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 8.5f),
+            Font = MainForm.F(8.5f),
             ForeColor = Txt2,
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -1067,7 +1067,7 @@ public partial class ClassicForm : AntdUI.Window
         {
             Dock = DockStyle.Fill,
             Radius = radius,
-            Shadow = shadow,
+            Shadow = 0,   // 与主窗体一致: 阴影绘制开销大, 用描边代替
             BorderWidth = 1.2F,
             BorderColor = CardBorder,
             Margin = new Padding(2)

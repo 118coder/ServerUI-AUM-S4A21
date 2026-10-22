@@ -1,0 +1,80 @@
+/* ==========================================================================
+   base.css — 复位与基础排版
+   禁止原生滚动条、原生右键、原生拖选、原生 title（§1.4）
+   ========================================================================== */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+  line-height: 1.5;
+}
+
+/* 允许选择的文本区域（日志、路径、输入框） */
+.sel, input, textarea, .log-line { user-select: text; }
+
+input, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  padding: 7px 10px;
+  outline: none;
+  width: 100%;
+}
+input:focus, textarea:focus { border-color: var(--primary); }
+input::placeholder, textarea::placeholder { color: var(--faint); }
+input[disabled], textarea[disabled] { opacity: .5; cursor: not-allowed; }
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+a { color: var(--primary); text-decoration: none; }
+img, svg { display: block; }
+ul, ol { list-style: none; }
+table { border-collapse: collapse; width: 100%; }
+
+/* 自绘滚动条（WebView2 = Chromium，可直接用 ::-webkit-scrollbar） */
+::-webkit-scrollbar { width: var(--w-scrollbar); height: var(--w-scrollbar); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  /* 默认可弱一点：深色下 --border-strong 太抢眼，像浏览器原生滚动条 */
+  background: var(--border);
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* 焦点只给键盘可见 */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* 页面切换：绝对不允许淡入淡出/滑动（§1.6） */
+/* 页面切换本身无动画；只保留悬停/状态过渡。不要用 animation:none 一刀切，
+   否则按钮/日志里的 .spinner 忙碌指示器也会停转。 */
+.page, .page * { transition: background-color var(--t-hover) ease, border-color var(--t-hover) ease, color var(--t-hover) ease, opacity var(--t-fast) linear; }
+
+/* 工具类 */
+.hidden { display: none !important; }
+.row { display: flex; align-items: center; }
+.col { display: flex; flex-direction: column; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.gap8 { gap: 8px; }
+.gap10 { gap: 10px; }
+.mono { font-family: var(--font-mono); }
+.t2 { color: var(--text-2); }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

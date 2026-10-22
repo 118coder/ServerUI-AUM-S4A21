@@ -17,7 +17,7 @@
 | 分支（S4A21） | 全链 **master**（S4A12 保持 main） | ⚠️ **尚未单点化**：update.ps1 内 5 处字面量（见二节明细）+ MirrorUploadService.cs 常量 + 开发者脚本变量 |
 | 文件名前缀 | S4A21：`ServerS4A21-*` / `ServerS4A21-GMTool-*`；S4A12（仅开发者脚本）：`ServerS4A12-*` / `DfoGmTool-*` | update.ps1 镜像 URL 数组（L114-124）集中；MirrorUploadService.cs 与开发者脚本内字面量 |
 | 令牌 | 双重 base64 加密，4 平台 | update.ps1（GitGud+Gitee）、MirrorUploadService.cs、PlatformAdapters×4、开发者上传.ps1（集中变量） |
-| 更新日志 | 数据源 = gitgud ServerS4A21 提交（master）；镜像 `mirrors/更新日志.txt` | update.ps1 L2108 提交拉取段；MirrorUploadService.cs 上传段 |
+| 更新日志 | S4A21 下载端数据源 = gitgud ServerS4A21 提交（master）→ 本地缓存 → 镜像 `mirrors/S4A21更新日志.txt`（Gitee API → GitHub API → Codeberg raw）。`mirrors/更新日志.txt` = S4A12 仓库（86JP）提交，供旧版 S4A12 工具，与 S4A21 日志互不覆盖（开发者脚本双名双源上传） | update.ps1 [5/5] 提交拉取段 + `Download-FromGitee/GitHub`；SelfUpdateService `DownloadChangelogFromMirror`；MirrorUploadService `UploadChangelog` |
 
 **一句话维护规则**：换仓库/换镜像名/换前缀 → 优先改各脚本顶部变量与 C# 常量（已集中）；换分支 → 按二节修改点逐处替换（未集中）；换令牌 → 五节手册（4 处文件）。
 
@@ -75,7 +75,8 @@
 | S4A12 服务端 latest | `mirrors/ServerS4A12-latest.zip` | 开发者脚本保留 |
 | S4A12 GM latest | `mirrors/DfoGmTool-latest.zip` | 开发者脚本保留 |
 | 元数据 | `latest.json` | 双系列兼容结构：顶层 = 当前 S4A21（package/sha256/size_bytes/download_*），并附 `s4a21` / `s4a12` 两个完整区块；S4A12 哈希由本地 `latest\ServerS4A12-latest.zip` 推算并入 |
-| 更新日志 | `mirrors/更新日志.txt`（URL 编码 `%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt`） | 由 gitgud ServerS4A21 提交记录生成 |
+| 更新日志（S4A21 专用） | `mirrors/S4A21更新日志.txt`（URL 编码 `S4A21%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt`） | 由 gitgud ServerS4A21 提交记录生成 |
+| 更新日志（S4A12） | `mirrors/更新日志.txt`（URL 编码 `%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97.txt`） | 数据源 = gitgud 86JP 提交记录（S4A12 仓库，开发者脚本 [6b/8] 上传，v2.15 起与 S4A21 日志双名双源） |
 
 清理规则：按前缀各自保留最近 **2** 个；GitHub 额外清理 Release 与 tag（各保留 2）。
 
@@ -105,7 +106,7 @@ GM：    dotnet publish dfogmtool\DfoGmTool.csproj -c Release -r win-x64 --self-
 - 无依赖版约 53,109,540 B；有依赖版约 3,865,333 B；兼容模式约 1,922,560 B。csproj 用 `EnableCompressionInSingleFile`（自包含时自动压缩 114MB→50.6MB）；WinForms 不支持 Native AOT（NETSDK1175），勿尝试。
 - 部署两处都要：游戏根（与 DNF.exe 同级）+ `AUM管理组件\`（`管理器.bat` 在此查找三件套）。
 - 版本号 v2.1 定义处：`MainForm.cs` 的 `VER` 常量（NET48 → "2.1-V"）、三个 csproj 的 Version/AssemblyVersion/FileVersion/InformationalVersion、`AUM-version.txt`。
-- 已知警告（可忽略、勿删）：`MainForm.cs(353) warning CS0162 不可达代码`；兼容模式 Fody PrivateAssets 提示。
+- 已知警告（可忽略、勿删）：`MainForm.cs` 的 `warning CS0162 不可达代码`（行号随代码增长变化，认 CS0162 即可，来源是 `UseComposited=false` 常量）；兼容模式 Fody PrivateAssets 提示。
 
 ---
 
@@ -139,6 +140,7 @@ GM：    dotnet publish dfogmtool\DfoGmTool.csproj -c Release -r win-x64 --self-
 | `MainForm.Troubleshoot.cs` | 疑难杂症页（FAQ 条目字典） |
 | `ClassicForm.cs` / `MiniForm.cs` / `Compat.cs` | 双缓冲旧窗体 / 迷你模式 / net48 兼容适配 |
 | `Services\` | ArchiveService / ServerService / UpdateService / SelfUpdateService / MirrorUploadService / PlatformAdapters（4 平台） |
+| `..\ServerUI.Headless\` | **无头自测工程**（复用本目录全部源码，不带管理员清单、不显示窗口、不联网）；见九节第 10 条 |
 
 ### 6.2 ps1 编码规则（强制，已踩坑）
 - **所有 ps1 一律 UTF-8 带 BOM**（`EF BB BF`）：gmtool / save-quick / save-switch / 更新AUM / 进行本地编译 / update.ps1 均如此。
@@ -193,6 +195,50 @@ GM：    dotnet publish dfogmtool\DfoGmTool.csproj -c Release -r win-x64 --self-
 
 ---
 
+### 7.5 v2.15（本地修复版）
+
+**更新日志链路大修**（"镜像日志拉不到 / 一直是旧内容"根因修复）：
+- update.ps1 新增 `Test-DownloadOk`：ZIP 完整性校验只对 .zip 生效，.txt 按存在+非空判定（旧逻辑对 .txt 跑 ZIP 校验恒失败 → Gitee/GitHub 两级镜像回退形同虚设，只剩 Codeberg 可用）。
+- update.ps1 镜像日志回退统一改拉 `mirrors/S4A21更新日志.txt`；镜像提交并入后**写回本地提交缓存**（gitgud 持续断网时历史也能累积）；主源+缓存+镜像全空且本地已有日志时**保留旧日志不覆盖**；第1页/兜底重试 10 次 → 3 次（断网不再卡约 2 分钟）；同日期提交消息去重。
+- SelfUpdateService `DownloadChangelogFromMirror` 重写：Gitee API（带令牌，国内直连优先）→ GitHub API（带令牌）→ Codeberg raw。旧实现裸 raw 直链对私有仓库必 404/403。
+
+**其他修复**：ServerService `Stop()` 改为等待 DfoServer 进程本体退出（旧逻辑 bat 句柄为 null 时 0 秒强杀存盘中的服务端 → 回档）；Rs() 检测到外部启动的服务端只提示不清理（不再误杀手动开服）；增量/全量更新加 `_updateBusy` 防重入；OU/OD 回调 UI 访问全部封送（BeginInvokeUi）；同步网络时间移后台线程（断网不再整窗假死）+ 防重入；存档导入/导出/储存纳入 DoArchiveOp 防护、导入前自动备份、极简模式补 `TB()` 备份修剪；GameGaurd.ini 读写改为编码探测回退（GBK 文件不再被转码损坏，写回保持原编码）；新DLL安装失败清单如实警告；镜像上传前等待令牌校验完成；AUM 自更新 Completed 只订阅一次。
+
+**GameGaurd.ini 写入顺序 + 拖拽排序（v2.16）**：
+- 修复：应用更改/添加扩展会把自定义 DLL 排到 [Plugins] 最前，基础挂载器 GameNative 被排到后面导致部分插件加载失败。现在写入顺序 = GameNative（强制 Plugin0）→ 受管插件（界面顺序）→ 自定义扩展（界面顺序）。
+- 必选 DLL 置顶：DllPlugins 数组中 GameNative.dll 移到首位（UI 首行 + 写入顺序首位双重保证）。
+- 拖拽排序（**实时换位**，v2.16 实现四版；二版"又卡又慢"、三版"拖拽发起区不明显"先后返工）：**拖拽只从行首 ⠿ 手柄发起**——表格新增第一列（30F），`AddDragHandle` 创建无边框 `AntdUI.Button`（`IconSvg="HolderOutlined"` 六点阵图标、`BorderWidth=0`、`WaveSize=0`、`Cursor=SizeAll`、`Type=Default` 次要色）；必选 GameNative 行**无手柄**=固定首位，名称/说明文字不响应拖拽。跨过其他行时**立即换位**，松开定稿；受管/自定义两组互不拖动。仍采用 **AntdUI TabHeader.DragSort 同款手动 HitTest 状态机**，**不走 OLE DoDragDrop**。事件挂手柄自身：按下即持有**隐式 Capture**，Move/Up 全路由到手柄（坐标 `PointToClient` 换算到 tbl 系）——不挂容器、不显式转 Capture，AntdUI 按钮按压/悬停状态机自然复位，无"拖完卡在按下态"问题。二版教训（勿回退）：①每次跨越调用 `RebuildDllRows` 整表重建——销毁+新建几十个控件、分配 Font、逐控件强制同步重绘，单次跨越即肉眼可见卡顿；②换位用"RemoveAt+Insert"且 `ti>si` 时 `ti--`，**向下拖一行是无操作** → 指针停在目标行内时每个 MouseMove 都重建一次（重建风暴）。三版：**数据改交换语义**（`si↔ti` 元组互换，与视觉严格一致，换位后被拖行正好落在光标行、后续 Move 命中自身即返回）；**视觉改原位交换**（新函数 `SwapDllRowsVisual`：按名称标签定位两行 → 逐列 `GetControlFromPosition`/`SetCellPosition` 整行互换单元格 → `ResumeLayout(true)` 单次布局），拖拽全程**零控件销毁/新建**，每次跨越仅一次轻量布局；MouseUp **不再重建**（重建会把"已取消勾选、尚未应用"的自定义开关悄悄重置回勾选），高亮恢复改为记录原色 `_dragHl`/`_dragHlPrev`（AntdUI ForeColor 为可空 Color?）；`RebuildDllRows` 重建自定义开关时**沿用重建前勾选状态**（`prevCustOn` 快照，新添加文件默认勾选）。顺序状态由 `_managedOrder`/`_custRows` 维护，首次从 GameGaurd.ini 实际顺序初始化，应用更改后写回 ini → 重启后顺序保持。
+- 相关状态：`_orderDirty`（拖拽后、应用前刷新时不按 ini 旧顺序覆盖列表）、`ApplyDllPatch`/`InstallPatchZip` 成功后清除。
+
+**页面切换动效尝试与回退（v2.16）**：
+- 曾为 `ShowPage` 实现方向感知滑动动效并三轮调参（整卡滑入 200ms → 150ms → 短距 48px×`AutoScaleFactor` + 50ms），用户最终拍板**纯硬切**，代码已完整回退为原始逻辑（挂起布局切可见性 + 目标页强制定稿 + 内容区重绘；`_pageAnim*`/`_curPage`/`_curTag`/`PageOrder`/`SwitchPageInstant`/`EndPageAnim` 已全部删净）。
+- 结论：用户偏好即点即显，**不要再给页面切换加动画**；如需流畅感，优先做"切换零卡顿"（预布局、双缓冲，均已具备）而非过渡动效。
+- 附：此前 WCAG 2.2 检索提示拖拽排序应提供非拖拽替代（如上移/下移按钮），未实现，可作后续可选项。
+
+**DLL 扩展页两项用户反馈修复（v2.15 追加 4）**：
+- 4K/高 DPI 下添加自定义 DLL 后"排版缩小"：根因是 `RebuildDllRows` 的 DPI 补偿只放大字体与自定义开关、不放大行高列宽 → 运行期重建时"字变大、行高不变"，内容被行高裁切。现在缩放因子改为从**已被窗体 AutoScale 的启动控件实测推导**（`swDlls[0].Height / 22`，自洽于任意 DPI/缩放组合），并对行高、cell3 列宽一并按同一因子缩放。
+- GameGaurd.ini 被写成 UTF-8 **带 BOM**：原格式为 UTF-8 无 BOM，带 BOM 会导致挂载器解析异常。现在 `WriteIniText` 无条件 UTF-8 无 BOM（不再"有 BOM 保持 BOM"）；`ReadIniText`/`ReadConfigText` 读取时剥离 BOM（旧实现把 BOM 当普通字符读入又写回，BOM 永远删不掉），兼容 GBK 历史文件的读取。
+
+**更新进度条精准化（v2.15 追加 3）**：
+- update.ps1 真实里程碑重排（单调递增）：5 源预检前 → 8 源预检完成 → 20 下载完成 → 30 同步开始 → 55 编译开始 → **62 服务端 restore 完成 / 72 服务端 publish 落盘 / 80 GM publish 落盘**（主作用域轮询三个产物文件的 LastWriteTimeUtc，编译输出在 runspace 内缓冲无法直接流式上报）→ 85 日志开始 → 87-95 提交分页 → 完成时 GUI 跳 100%。旧日志段 60-93 与 85 打架的倒退标记已重排。
+- GUI（MainForm.Server.cs）：`[N/5]` 映射重校准为 5/10/30/55/85 且只前进；进度算法从"伪进度（蠕到 90/95 + 呼吸）"改为**真实里程碑跟随**——未达目标按 gap*0.16/500ms 平滑收敛、不越过目标；追平后仅 0.03%/tick 阶段内缓推（上限里程碑+4，绝对上限 97），100% 只由完成回调设置。
+
+**CET 与"服务端启动即断联"专项（v2.15 追加 2）**：
+- CET 规避链路全覆盖：update.ps1 顶部注入 `$env:DOTNET_EnableCET=0`；ServerService.Start/LaunchGmTool 向子进程注入；开始更新/全量更新/进行本地编译/GM工具/更新AUM/管理器 六个 bat 字节级插入 `set DOTNET_EnableCET=0`（不改动 bat 原编码）。
+- 服务端启动即断联对策：Start() 启动前自动清理残留 DfoServer（防端口占用秒退）；记录 StartedAtUtc/UnexpectedExitUtc/LastExitCode，启动后 2 分钟内意外退出时运行日志输出退出代码+四条排查提示（杀毒/端口/CET/exe缺失）；疑难杂症页新增【CET兼容提示】【开始游戏后服务端瞬间断联】两条 FAQ。
+- 已知事实：start-server.bat 不做编译，仅启动预编译的 DfoServer.exe —— "编译失败"只影响更新流程，不会导致启动秒退。
+
+**主源/上传者链路深检（v2.15 追加）**：
+- `Download-FromGitHub` 重排：优先用 API 返回的 content 解码；大文件无 content 时给 raw 直链补 Authorization 头（私有仓库 raw 匿名必 404，旧逻辑先走无认证的 download_url → GitHub 镜像腿对大/小文件一直失败）。
+- update.ps1 把 GitHub 选为主源时改走 API 下载（`$svrFromGitHub`，与 Gitee 同款；旧分支用无认证 raw 直链必 404）。
+- 上传者模式上传前用 `Compat.IsValidZip` 做完整性校验（防被网关污染/截断的包连同 SHA 污染三平台 latest.json）；更新日志等待本次更新刷新（最长 6 分钟）后再上传，消除"镜像日志滞后一拍"。
+
+**验证（2026-09-08 实测）**：GitGud 主源 archive.zip（200/2.67MB/CRC 全对）、commits API（正常返回）、GM archive（200）；AST 提取真实函数实测——GitHub 拉更新日志 ✅、Gitee 拉 2.67MB 服务端 zip ✅、GitHub 拉 2.67MB 服务端 zip（raw+认证）✅；net10/net48 双工程编译 0 错误。
+
+**验证**：net10 与 net48 双工程编译 0 错误；update.ps1 保持 BOM、PS 5.1 ParseFile 0 错误；AST 提取真实 `Download-FromGitee` 实测拉取 S4A21更新日志.txt 成功（修复前恒失败）。
+
+---
+
 ## 八、实测验证结果（2026-08-24）
 
 | 测试项 | 结果 |
@@ -219,3 +265,48 @@ GM：    dotnet publish dfogmtool\DfoGmTool.csproj -c Release -r win-x64 --self-
 7. **更新日志为空**：先查分支是否用了 `main`（2.2 警告）。
 8. **改版号**：同步 5 处——`MainForm.cs` VER（含 NET48 分支）、`ServerUI.csproj`、`ServerUI-Win7.csproj`、`ServerUI.csproj(主版本-net10).txt`、`AUM-version.txt`。
 9. **文档同步**：功能行为变化后同步「使用说明」页条目、《更新记录与安装目录结构.md》、本文件。
+10. **UI 改动先跑无头自测**（v2.17 起，不弹窗、不提权、不联网）：
+    ```
+    cd AUM管理组件\ServerUI.Headless
+    $env:SERVERUI_BASE_DIR = "E:\Game\S4A21_CN\AUM管理组件"
+    dotnet run -c Release -- C:\Users\你\Desktop\ui-report
+    ```
+    输出：`ui-report\layout.txt`（页标题是否绘制、0 尺寸控件、单行文字裁切、切页耗时、快照切页结果）
+    + 7 张页面 PNG + 深色/浅色对照。改完 UI **先看报告再部署**。
+    - 工程不带 `app.manifest`，所以不会请求管理员；窗口移到屏幕外、1% 透明度、不抢焦点。
+    - 通过 `SERVERUI_BASE_DIR` 指向真实部署目录，才能读到 `GameGaurd.ini` / 存档等真实数据。
+    - 无头模式下 `CaptureContent()` 改用 `DrawToBitmap`（屏幕外没法 `CopyFromScreen`）。
+11. **UI 性能红线（勿回退）**：
+    - `Card()` 的 `Shadow` 必须为 0 —— 实测卡片阴影占整页重绘约 60%（130ms → 55ms）。
+    - `Card(8, 2)` 的第二参数已不再生效；不要为了"立体感"把阴影加回来。
+    - 字体一律用 `F(字号, 样式)` 缓存；不要在循环/重建里 `new Font`（尤其日志的加粗行）。
+    - 页面根容器用 `TableLayoutPanel` 绝对行高时，标题类控件必须 `Margin=0`：
+      AntdUI.Label 在"控件高度 < 行高"时整行不绘制（v2.17 页标题消失的根因）。
+    - 页面切换不要改回"先绘制再显示"：`ShowPage` 走快照优先（详见《更新记录…》七节）。
+    - 日志 `FlushLog` 的 `WM_SETREDRAW` 包裹、批量和 `_logBuilder` 裁剪不要拆掉。
+
+
+---
+
+## 十、WebView2 重构版维护（v2.16+）
+
+- **工程**：`AUM管理组件\ServerUI.Web\`（net10.0-windows，WPF + WebView2）。旧 `ServerUI\` 仅作为兼容模式与其 Services/Models 的只读链接来源；不要在新界面里改旧 MainForm。
+- **构建/发布**：见《ServerUI-WebView2重构说明.md》三节；单文件发布必须带 `IncludeNativeLibrariesForSelfExtract=true`，自包含版再加 `EnableCompressionInSingleFile=true`。
+- **前端资源**：`web\` 在构建时压成嵌入资源 `ServerUI.Web.web.zip`，启动解压到 `%LOCALAPPDATA%\ServerUI.Web\web\<sha256>\`；改 CSS/JS 后必须重新构建，或设 `AUM_WEB_ROOT=…\web` 做热改。
+- **IPC id 必须字符串**：前端 `bridge.js` 用 `'c' + seq`；宿主按字符串回显。数字 id 在 mock 里能过、真实宿主会全部超时（已踩过）。
+- **禁止原生 UI**：不要引入 `MessageBox`、`<select>`、`<input type=date>`、系统右键/窗口；确认、提示、文件选择、日期选择全部用 `web/js/ui/*` 的主题化组件。
+- **路径**：`Paths.Ad` 兼容 exe 在游戏根或 AUM 目录两种位置；`Paths.Gr` 始终按 Ad 的父目录推导；`LocalGameBat` 必须用 `Gr\本地游戏S4.bat`（exe 在游戏根时旧逻辑会指到上一层）。
+- **AUM 自更新**：`CheckAndUpdateAumAsync` 有护栏（`blocked:true`），避免旧 `SelfUpdateService` 编译 WinForms 源码覆盖新 exe；新版源码发布后应改为发布 `ServerUI.Web.csproj` 并移除护栏。`AUM_ALLOW_LEGACY_SELFUPDATE=1` 仅用于确认要回退旧版的场景。
+- **窗口模式**：几何切换在 `MainWindow.SetMode/ApplyMode`；JS 只发 `window.mode`，不得直接改窗口尺寸。full 几何在离开前保存、返回时恢复，关闭时保存的是 full 几何。
+- **测试**：
+  - `node tools\ui-shots.js --out ..\_ui-report --sizes=1280x840,1080x700`（mock，0 个 `!!`）；
+  - `node tools\app-shots.js --exe=..\ServerUI-有依赖版.exe --out ..\_ui-report\real --no-close`（真实宿主离屏 + 真实数据只读）；
+  - 离屏钩子：`AUM_OFFSCREEN=1`、`AUM_CDP_PORT`、`AUM_DATA_ROOT`、`AUM_WEBVIEW_DATA`；默认不弹窗、不提权。
+- **性能红线**：不要加页面过渡/淡入淡出；日志必须批量 append；状态推送必须 JSON diff 后原地更新；页面切换不要重建侧栏/日志。
+- **兼容模式**：`ServerUI-兼容模式.exe` 与 `开始游戏-ServerUI.exe` 保持旧版，不随新界面更新；Win7 仍可用。
+
+12. **v2.20 界面色板（勿回退）**：控件色 = 老版 Ant Design 深色（`--bg #141414`、`--surface #1C1C1C`、`--primary #1668DC`、`--success #49AA19`、`--danger #DC4446`、`--warning #D89614`）；日志色 = 旧 MainForm 原值（`#28A745/#FD7E14/#DC3545`，底 `#18181C`）。两套色板互不跟随，改控件色不要连日志一起改。
+13. **日志区跟随主题**：`tokens.css` 深色段是旧版日志色（`#18181C` + `#28A745/#FD7E14/#DC3545`），light 段覆盖为 `#F5F5F7` + `#1A7F37/#B25E09/#CF1322`。`ui-shots.js` 的 `palette-dark/palette-light` 会分别断言两套日志色，改一处必须同步改断言。
+14. **启动动画只用合成层**：`MainWindow.xaml` 的 `Splash` 与 `web/index.html` 的 `.splash` 同构；动画只允许 `OpacityProperty` / `TranslateTransform` / `ScaleTransform` / `RotateTransform`。不要动画 `Width`/`Height`/`Margin`/`Padding`。弧线在 WebView2 就绪前持续旋转（`RepeatBehavior.Forever`），就绪后由 `HideSplash` 停表并淡出（会把动画时钟置 null，避免隐藏层持有渲染资源）。
+15. **服务端控制台必须不可见**：`ServerService.Start` 用 `WindowStyle=Hidden` + `CreateNoWindow=false`（不能改 true，DfoServer 需要真实控制台）；隐藏句柄只能用 `AttachConsole + GetConsoleWindow + ShowWindow`，`Process.MainWindowHandle` 对 cmd/conhost 恒为 0。`--selftest` 的 `consoleHide` 探针必须 `ok:true`。
+16. **DLL 排序只走 Pointer Events**：`dll.js` 手柄 `pointerdown` + 4px 阈值 + `insertBefore` 实时换位 + 松手一次 `dll.setOrder`。真实 WebView2 里 HTML5 `dragstart` 不可靠，不要再改回 `draggable`/`dataTransfer`。

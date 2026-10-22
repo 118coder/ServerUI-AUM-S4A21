@@ -1,0 +1,144 @@
+/* ==========================================================================
+   pages.css — 页面级布局（Phase 1 仅「开始 / 概览」页）
+   ========================================================================== */
+
+/* ---------- 页头（每页第一行，高 58px） ---------- */
+.page-head {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.page-head .ph-text { flex: 1 1 auto; min-width: 0; }
+.page-title { font-size: var(--fs-page-title); font-weight: 700; letter-spacing: .2px; }
+.page-sub { font-size: var(--fs-subtitle); color: var(--muted); margin-top: 2px; }
+
+/* ---------- 统计卡（4 联，高 92） ---------- */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap-card);
+  margin-bottom: var(--gap-card);
+}
+.stat-card {
+  height: 92px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+}
+.stat-card .s-caption {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-card .s-value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-stat);
+  font-weight: 700;
+  letter-spacing: .3px;
+  line-height: 1.15;
+  min-width: 0;
+}
+.stat-card .s-value .s-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 长文本卡（.NET SDK）：字号收一档 + 允许折行，保证 1080 宽下不裁切 */
+.stat-card.compact .s-value { font-size: 15px; letter-spacing: 0; line-height: 1.2; }
+.stat-card.compact .s-value .s-text { white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; }
+/* 状态圆点 6px（红/绿/橙） */
+.stat-card .s-value .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 6px;
+}
+.s-value.ok { color: var(--success); }
+.s-value.ok .dot { background: var(--success); }
+.s-value.off { color: var(--text-2); }
+.s-value.off .dot { background: var(--muted); }
+.s-value.warn { color: var(--warning); }
+.s-value.warn .dot { background: var(--warning); }
+.s-value.bad { color: var(--danger); }
+.s-value.bad .dot { background: var(--danger); }
+
+/* ---------- 两栏 58 / 42：撑满内容区高度，卡片等高、页脚提示贴底 ---------- */
+.dash-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+  gap: var(--gap-card);
+  flex: 1 1 auto;
+  align-items: stretch;
+}
+.dash-cols > .card {
+  display: flex;
+  flex-direction: column;
+}
+.dash-cols > .card > .ctrl-stack { flex: 0 0 auto; }
+.card .hint { margin-top: auto; }
+
+/* ---------- 控制器竖向排布 ---------- */
+.ctrl-stack { display: flex; flex-direction: column; gap: 10px; }
+
+/* 停止(左 1/3) —— 空 —— 重启(右 1/3) */
+.btn-row3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gap-card);
+}
+.btn-row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+/* 行：左标签 + 右控件 */
+.opt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+.opt-row > .o-label {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.opt-row > .o-spacer { flex: 1 1 auto; }
+
+/* 更新区信息行 */
+.info-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  min-height: 18px;
+}
+.info-line .mono { color: var(--text-2); font-family: var(--font-mono); }
+.info-line svg { width: 12px; height: 12px; flex: 0 0 12px; }
+
+/* 页脚提示小字 */
+.hint {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-small);
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+/* 窄窗口自适应（<1010px 内容宽度） */
+@media (max-width: 1010px) {
+  .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-cols { grid-template-columns: minmax(0, 1fr); }
+}

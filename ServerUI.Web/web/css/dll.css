@@ -1,0 +1,208 @@
+/* ==========================================================================
+   dll.css — DLL 扩展页（Phase 2 · C）
+   页头 58 / 列表卡片（flex）/ 操作行 34+ / 状态行 / 说明行
+   ========================================================================== */
+
+.dll-page {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.dll-page .page-head { gap: 8px; }
+
+/* ---------- 列表卡片 ---------- */
+.dll-card {
+  flex: 1 1 auto;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  /* 右侧留出滚动条位置，操作按钮不会被滚动条压住；
+     上下内边距压到 12，保证 1280×840 能一屏放下 8 + 分组 + 2 行 */
+  padding: 10px 16px 8px 16px;
+}
+.dll-listhead { font-size: var(--fs-small); color: var(--muted); line-height: 1.5; }
+.dll-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 2px;
+  /* 让滚动条紧贴卡片内容右缘，且给滚动条自身留 8px，避免遮住最后一列 */
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+/* ---------- 行：五列单行（手柄 / 开关 / 名称 / 说明 / 操作） ---------- */
+.dll-group { display: flex; flex-direction: column; }
+.dll-row {
+  display: grid;
+  grid-template-columns: 28px 48px 200px minmax(0, 1fr) 92px;
+  align-items: center;
+  column-gap: 10px;
+  height: 38px;
+  padding: 2px 10px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color var(--t-hover) ease;
+}
+/* 自定义扩展行：名称列占用更少（文件名通常较短），说明列仍自适应 */
+.dll-row.custom { grid-template-columns: 28px 48px 200px minmax(0, 1fr) 92px; }
+.dll-row:hover { background: var(--surface-2); }
+/* 拖拽中的行：提升视觉层次（背景 + 阴影 + 轻微位移），仅用颜色/阴影，不加动画 */
+.dll-row.dragging {
+  position: relative;
+  z-index: 3;
+  background: var(--surface-3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .45);
+  opacity: .96;
+}
+/* 插入线：被拖行上/下沿 2px 主色（实时换位后它就是目标位置）。
+   用伪元素画，避免覆盖 .dragging 的提升阴影。 */
+.dll-row.drop-before::before,
+.dll-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--primary);
+  pointer-events: none;
+  z-index: 4;
+}
+.dll-row.drop-before::before { top: -1px; }
+.dll-row.drop-after::after { bottom: -1px; }
+/* 拖拽期间禁止文本选中 / 保持抓取光标 */
+body.dll-dragging, body.dll-dragging * { cursor: grabbing !important; user-select: none !important; }
+
+/* 手柄列 */
+.dll-grip {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;       /* 指针拖拽期间不触发浏览器手势/滚动 */
+  border-radius: var(--r-input);
+}
+/* SVG 图标必须给尺寸，否则默认 300×150 会把整行撑高 */
+.dll-grip svg { width: 14px; height: 14px; }
+.dll-grip:hover { color: var(--text); background: var(--surface-3); }
+.dll-grip:active { cursor: grabbing; }
+/* 必选行：不显示拖拽手柄，改显示锁图标，提示不可移动/不可关闭 */
+.dll-grip.grip-none { cursor: default; color: var(--faint); }
+.dll-grip.grip-none:hover { background: transparent; color: var(--faint); }
+
+/* 开关列：48px 必须能容纳 40px 的 switch（含边框实宽 42px） */
+.dll-ctl {
+  width: 48px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.dll-ctl .switch { width: 40px; }
+
+/* 名称列：固定 200、粗体、单行省略 */
+.dll-name {
+  min-width: 0;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dll-name.missing { color: var(--danger); }
+
+/* 说明列：11px muted，单行省略 */
+.dll-desc {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dll-desc.missing { color: var(--danger); }
+
+/* 操作列：92px 右对齐 */
+.dll-actions {
+  width: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* 必选（GameNative）：锁定但视觉仍是「开启」——不看 40% 透明开关 */
+.dll-row.locked .switch[disabled] { opacity: 1; cursor: default; }
+.dll-row.locked .switch[disabled] .track { background: var(--primary); border-color: var(--primary); }
+.dll-row.locked .switch[disabled] .knob { left: 19px; background: #FFFFFF; }
+
+/* ---------- 分组标题 ---------- */
+.dll-cap { margin: 2px 0 0; padding: 0 10px; }
+.dll-cap-text {
+  /* 旧 UI：分组标题左对齐，不是居中 */
+  text-align: left;
+  font-size: var(--fs-small);
+  color: var(--text-2);
+  letter-spacing: .3px;
+  line-height: 1.15;
+}
+.dll-cap-text.muted { color: var(--faint); }
+
+/* ---------- 未安装空态 ---------- */
+.dll-empty { padding: 26px 10px 30px; }
+.dll-empty-cap {
+  text-align: center;
+  font-size: var(--fs-section);
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+.dll-empty-tip {
+  max-width: 620px;
+  margin: 0 auto;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  line-height: 1.8;
+  white-space: pre-line;
+  text-align: center;
+}
+
+/* ---------- 操作行 / 状态行 / 说明行 ---------- */
+.dll-ops {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.dll-ops .btn { flex: 0 0 auto; }
+/* 说明小字与按钮同行：单行省略（全文放 data-tip 悬停可看），
+   否则两三行文字会把 1280×840 的列表挤出屏幕 */
+.dll-ops .dll-opnote {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--faint);
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dll-status {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  min-height: 16px;
+}
+.dll-status.dirty { color: var(--warning); }
+
+.dll-page.busy { cursor: progress; }
+.dll-page.busy .dll-ops button { opacity: .45; pointer-events: none; }

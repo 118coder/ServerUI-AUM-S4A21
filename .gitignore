@@ -1,0 +1,12 @@
+# 构建产物 / 本地缓存 / 测试输出
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+_ui-report/
+_ui-report-*/
+_backup_*/
+__pycache__/
+*.log
