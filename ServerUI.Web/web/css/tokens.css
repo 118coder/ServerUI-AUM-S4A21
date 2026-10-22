@@ -1,0 +1,107 @@
+/* ==========================================================================
+   tokens.css — 设计令牌（任务书 §6.1）
+   深色为默认；html[data-theme="light"] 覆盖。
+   ========================================================================== */
+
+:root {
+  /* 颜色（深色，默认）
+     v2.20：控件色回归老版 Ant Design 深色（页面 #141414 / 卡片 #1C1C1C），
+     与旧 AntdUI 的控件色一致；日志行色是另一套，见下方 --log-*，不要跟随这里。 */
+  --bg: #141414;
+  --surface: #1C1C1C;
+  --surface-2: #232323;
+  --surface-3: #2B2B2B;
+  --border: #2B2B2B;
+  --border-strong: #424242;
+  --text: #DCDCDC;
+  --text-2: #B0B0B8;
+  --muted: #8C8C94;
+  --faint: #787880;
+  --primary: #1668DC;
+  --success: #49AA19;
+  --danger: #DC4446;
+  --warning: #D89614;
+  --info: #13A8A8;
+  --gold: #B8860B;
+  --log-bg: #18181C;
+  /* 日志区边框 / 行悬停：深色下日志自带深底，不需要额外描边 */
+  --log-border: transparent;
+  --log-hover: rgba(255, 255, 255, .06);
+
+  /* 日志行配色（§6.4）——深色保持老版 MainForm 的 Gn/Or/Rd/Cy/Txt2/LogBg 原值；
+     浅色主题覆盖为浅底可读的深色版本，见下方 html[data-theme="light"] */
+  --log-default: #F0F0F5;
+  --log-success: #28A745;
+  --log-warning: #FD7E14;
+  --log-error: #DC3545;
+  --log-info: #4FC3F7;
+  --log-secondary: #B0B0B8;
+
+  /* 字体 */
+  --font: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  --font-mono: Consolas, "Cascadia Mono", monospace;
+
+  /* 字号 */
+  --fs-page-title: 20px;
+  --fs-subtitle: 12px;
+  --fs-section: 13px;
+  --fs-body: 12.5px;
+  --fs-btn: 13px;
+  --fs-small: 11px;
+  --fs-stat: 20px;
+
+  /* 圆角 */
+  --r-card: 8px;
+  --r-btn: 6px;
+  --r-input: 6px;
+  --r-pill: 999px;
+  --r-seg: 6px;
+
+  /* 间距 */
+  --gap-window: 12px;
+  --w-sidebar: 180px;
+  --pad-card: 16px;
+  --gap-card: 10px;
+
+  /* 骨架尺寸 */
+  --h-titlebar: 48px;
+  --h-log: 190px;
+  --h-log-collapsed: 46px;
+  --h-resizer: 10px;
+  --w-scrollbar: 8px;
+
+  /* 过渡（只允许颜色/位移，≤120ms） */
+  --t-fast: 80ms;
+  --t-hover: 120ms;
+}
+
+html[data-theme="light"] {
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: #F5F5F7;
+  --surface-3: #ECECF1;
+  --border: #E3E3E8;
+  --border-strong: #9A9AA5;
+  --text: #1F1F23;
+  --text-2: #5C5C66;
+  --muted: #6E6E78;
+  --faint: #70707A;
+  --primary: #2196F3;
+  --success: #4CAF50;
+  --danger: #F44336;
+  --warning: #FF9800;
+  --info: #00BCD4;
+  --gold: #B8860B;
+
+  /* 日志区跟随浅色主题：浅灰底 + 深色文字（避免白色界面里出现一大块黑）。
+     行色用浅底可读的深色版本，与控件语义色区分开。 */
+  --log-bg: #F5F5F7;
+  --log-border: #E3E3E8;
+  --log-hover: rgba(0, 0, 0, .05);
+  --log-default: #1F1F23;
+  --log-success: #1A7F37;
+  --log-warning: #B25E09;
+  --log-error: #CF1322;
+  --log-info: #0B69C0;
+  --log-secondary: #5C5C66;
+}

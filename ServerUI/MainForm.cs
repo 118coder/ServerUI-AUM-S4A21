@@ -31,8 +31,10 @@ using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.VisualBasic;
@@ -55,6 +57,67 @@ public partial class MainForm : AntdUI.Window
     static readonly Color Gold = Color.FromArgb(218, 165, 32);  // 金色
     static readonly Color Txt2 = Color.FromArgb(176, 176, 184); // 次要文字(日志区固定底色)
     static readonly Color LogBg = Color.FromArgb(24, 24, 28);   // 日志区深色底
+    static readonly Color Mute = Color.FromArgb(140, 140, 148); // 统一次要文字 (副标题/说明)
+    static readonly Color Faint = Color.FromArgb(120, 120, 128); // 更弱一级 (表头/分组)
+
+    // =================================================================
+    // 字体缓存 — 界面里 90% 的文字只用这几档字号
+    // 旧实现每建一个 Label 就 new Font 一次, 运行期重建 DLL 列表 / 每条加粗日志
+    // 都会再分配 GDI 字体句柄且从不释放; 统一走缓存后句柄数量恒定
+    // 注意: 缓存字体是共享只读对象, 任何地方都不要 Dispose 它
+    // =================================================================
+    static readonly Dictionary<(float, FontStyle), Font> _fontCache = new();
+    internal static Font F(float size, FontStyle style = FontStyle.Regular)
+    {
+        var key = (size, style);
+        lock (_fontCache)
+        {
+            if (!_fontCache.TryGetValue(key, out var f))
+            {
+                f = new Font("Microsoft YaHei UI", size, style);
+                _fontCache[key] = f;
+            }
+            return f;
+        }
+    }
+
+    // ===== 页头状态胶囊 =====
+    AntdUI.Panel _stPill;
+    AntdUI.Label _stPillLb;
+    int _stKind = -1;                 // 0=未运行 1=运行中 2=外部运行 (主题切换时重绘用)
+    string _stPillText = "未运行";
+
+    // ===== 页面切换交叉淡入 (v2.17) =====
+    // 切换瞬间抓取新旧两帧截图, 在内容区叠加一层 130ms 的淡出层:
+    // 动画期间是静态位图, 不触发任何布局/重排, 因此不会像滑动动画那样拖慢切换
+    const int PageFadeFrames = 8;     // 8 × 16ms ≈ 130ms
+    Control _pageFade;
+    Timer _pageFadeTimer;
+    int _pageFadeStep;
+    string _curPageTag = "dash";      // 当前页 (同一页重复点击不再重排)
+    Control _curPageControl;          // 当前页控件 (缓存快照用)
+    bool _pageFadeReady;              // 首帧显示完成前不做截图淡入
+
+    // 页面快照缓存 (快照优先切页) — 点击后先用"上次的画面"立刻开始交叉淡入,
+    // 真正的页面切换与绘制在这 130ms 动画之后、被快照盖住时完成。
+    // 用户感知: 点击即响应; 剩下的 ~60ms 绘制被动画完全遮住。
+    const int PageShotCacheMax = 4;   // 最多缓存 4 页 (每页约 6MB)
+    readonly Dictionary<Control, Bitmap> _pageShots = new();
+    readonly List<Control> _pageShotOrder = new();   // LRU 顺序 (旧 → 新)
+    Control _pendingPage;             // 动画结束后要切换到的页面
+    bool _switchAtFadeEnd;            // 快照优先模式: 动画结束后再真正切页
+    Size _lastShotSize;               // 上次抓帧时的内容区尺寸 (变化则缓存失效)
+
+    // ===== 日志区高度 (可拖拽分隔条) =====
+    const int LogCollapsedH = 46;
+    int _logExpandedH = 170;
+
+    // ===== 悬停提示 (AntdUI 原生 Tooltip, 与主题一致) =====
+    readonly AntdUI.TooltipComponent _tips = new();
+    void Tip(Control c, string text)
+    {
+        try { _tips.SetTip(c, text); } catch { }
+    }
 
     // MB = 备份存档保留的最大数量 (当前 10 个)
     const int MB = 10;
@@ -67,7 +130,13 @@ public partial class MainForm : AntdUI.Window
 #endif
 
     // ===== 路径计算 =====
-    readonly string _bd = AppDomain.CurrentDomain.BaseDirectory;
+    // 无头自测可用 SERVERUI_BASE_DIR 指向真实部署目录, 复现正式环境的相对路径
+    // 用 AppContext.BaseDirectory: 单文件发布时它是 exe 所在目录 (文档约定),
+    // 而 AppDomain.CurrentDomain.BaseDirectory 在部分单文件/自解压场景会指向临时目录
+    readonly string _bd =
+        HeadlessMode && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SERVERUI_BASE_DIR"))
+            ? Environment.GetEnvironmentVariable("SERVERUI_BASE_DIR")
+            : AppContext.BaseDirectory;
     internal readonly string _ad;
     internal readonly string _gr;
 
@@ -83,7 +152,6 @@ public partial class MainForm : AntdUI.Window
     TableLayoutPanel _root;
     // 标题栏
     AntdUI.PageHeader hd;
-    AntdUI.Label lbStHd;              // 标题栏右侧状态
     AntdUI.Button btTheme;            // 明暗主题切换
     AntdUI.Button btSize;             // 窗口尺寸切换 (标准/小一半)
     // 导航
@@ -180,7 +248,7 @@ public partial class MainForm : AntdUI.Window
         StartPosition = FormStartPosition.CenterScreen;
         ControlBox = false;
         Text = "ServerS4A21 管理器 v" + VER; // 窗口标题 (任务栏显示)
-        Font = new Font("Microsoft YaHei UI", 10f);
+        Font = F(10f);
 
         // 拖放支持 — 让用户可以拖 .db 文件到窗口换挡
         AllowDrop = true;
@@ -189,11 +257,20 @@ public partial class MainForm : AntdUI.Window
         FormClosing += Fc;
 
         // 窗口拉伸过渡动画 — 拉伸过程中内容实时跟随, 拉伸结束后内容卡片平滑淡入
-        ResizeEnd += (s, e) => StartResizeFade();
+        ResizeEnd += (s, e) => { StartResizeFade(); SyncPageSizes(); };
 
         // 创建界面 + 启动定时器
         Build();
         Ti();
+
+        // 首帧显示完成后再允许截图淡入 (启动阶段截图会抓到未布局的半成品);
+        // 同时补一次隐藏页预布局 — Build() 时内容卡片可能还没有最终尺寸
+        Shown += (s, e) =>
+        {
+            if (HeadlessMode) return;   // 无头自测不做截图淡入, 避免叠加层影响渲染
+            _pageFadeReady = true;
+            SyncPageSizes();
+        };
 
         // v2.15: AUM 自更新完成回调只在构造时订阅一次
         // (旧逻辑每次点击【更新AUM】都 += 一个新 lambda, 多次更新后日志成对重复)
@@ -214,7 +291,16 @@ public partial class MainForm : AntdUI.Window
 
         // Load 事件中执行: 系统检测 / 状态刷新 / 网络检测 / AUM 自检
         // v2.03: Ck() 已异步化(SDK探测在后台线程), 首帧立即显示不卡顿
-        Load += async (s, e) => { PreLayoutClassic(); CheckDnfExists(); await Ck(); Rf(); await CheckBasicNetwork(); await CheckAUMUpdate(); };
+        Load += async (s, e) =>
+        {
+            PreLayoutClassic();
+            if (HeadlessMode) return;   // 无头自测: 不联网、不探测进程
+            CheckDnfExists();
+            await Ck();
+            Rf();
+            await CheckBasicNetwork();
+            await CheckAUMUpdate();
+        };
     }
 
     /*
@@ -256,10 +342,17 @@ public partial class MainForm : AntdUI.Window
     {
         try
         {
+            // 主题变了 → 旧页面快照的颜色不再匹配, 立刻丢弃
+            DisposePageFade(cancelPending: true);
+            ClearPageShots();
+            _lastShotSize = Size.Empty;   // 让下一次 SyncPageSizes 重新抓帧
             if (_helpFlow != null)
                 _helpFlow.BackColor = Style.Get(Colour.BgContainer);
             TshThemeSync();
+            DllThemeSync();             // 插件行名称颜色随主题重刷
             ApplyButtonsColor(this);
+            ApplyHeaderStatusColor();   // 状态胶囊底色/描边随主题重算
+            ApplyLogTheme();            // 日志滚动条跟随明暗主题
             if (_miniForm != null && !_miniForm.IsDisposed)
                 ApplyButtonsColor(_miniForm);
             if (_classicForm != null && !_classicForm.IsDisposed)
@@ -455,7 +548,7 @@ public partial class MainForm : AntdUI.Window
         var lb = new AntdUI.Label
         {
             Text = t,
-            Font = new Font("Microsoft YaHei UI", fs),
+            Font = F(fs),
             TextAlign = ContentAlignment.MiddleLeft,
             Dock = DockStyle.Fill
         };
@@ -464,8 +557,10 @@ public partial class MainForm : AntdUI.Window
     }
 
     /*
-     * 卡片工厂 — 圆角卡片 (主题自适应背景 + 阴影 + 1px 主题边框)
+     * 卡片工厂 — 圆角卡片 (主题自适应背景 + 1px 主题边框)
      * BorderColor 不指定 → 使用主题 BorderColor, 深浅模式下自动适配且清晰可见
+     * 性能: 阴影是整页重绘的最大开销 (无头实测切页绘制 ~130ms → ~55ms),
+     *       卡片之间改用 1px 主题描边区分层次, 视觉上依旧清晰
      */
     AntdUI.Panel Card(int radius = 8, int shadow = 1)
     {
@@ -473,7 +568,7 @@ public partial class MainForm : AntdUI.Window
         {
             Dock = DockStyle.Fill,
             Radius = radius,
-            Shadow = shadow,
+            Shadow = 0,
             BorderWidth = 1F,
             Margin = new Padding(4)
         };
@@ -487,10 +582,140 @@ public partial class MainForm : AntdUI.Window
         return new AntdUI.Label
         {
             Text = t,
-            Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold),
+            Font = F(10f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
+    }
+
+    /*
+     * 统一页头 (PageHead) — 页面标题 + 一行副标题 + 右侧操作区
+     * 视觉层级: 15pt 粗体标题 / 9pt 次要色副标题; 操作按钮右对齐等高
+     * 所有页面第一行都使用它, 让"我在哪一页 / 这页能做什么"一眼可见
+     */
+    Control PageHead(string title, string sub, params Control[] actions)
+    {
+        int n = actions == null ? 0 : actions.Length;
+        var head = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1 + n, RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(6, 2, 6, 4)
+        };
+        head.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        // 操作区用固定列宽 — 旧写法用 AutoSize 列测按钮首选宽度,
+        // 按钮文字一长就把整行列宽撑出父容器 (表现为右侧按钮被裁掉、标题被挤没)
+        for (int i = 0; i < n; i++)
+            head.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 156F));
+        head.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        var texts = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1, RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        texts.RowStyles.Add(new RowStyle(SizeType.Percent, 56F));
+        texts.RowStyles.Add(new RowStyle(SizeType.Percent, 44F));
+        texts.Controls.Add(new AntdUI.Label
+        {
+            Text = title,
+            Font = F(15f, FontStyle.Bold),
+            Dock = DockStyle.Fill,
+            // 关键: Label 默认 Margin=3 会吃掉 6px 高度; 15pt 粗体在高 DPI 下行高约 31px,
+            // 一旦控件高度小于行高, AntdUI.Label 会直接不绘制文字 (无头截图里就是"标题消失")。
+            // Margin=0 让标题占满行高, 稳定可见。
+            Margin = new Padding(0),
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+        texts.Controls.Add(new AntdUI.Label
+        {
+            Text = sub,
+            Font = F(9f),
+            ForeColor = Mute,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0),
+            TextAlign = ContentAlignment.TopLeft
+        }, 0, 1);
+        head.Controls.Add(texts, 0, 0);
+
+        for (int i = 0; i < n; i++)
+        {
+            actions[i].Dock = DockStyle.Fill;
+            actions[i].Margin = new Padding(4, 5, 4, 5);
+            head.Controls.Add(actions[i], 1 + i, 0);
+        }
+        return head;
+    }
+
+    /*
+     * 卡片小节标题 (SectionHead) — 左侧主题色竖条 + 10pt 粗体标题
+     * 比纯文字标题更容易扫读, 也把"服务端控制 / 更新与工具"这类卡片做了分组
+     */
+    Control SectionHead(string title)
+    {
+        var box = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2, RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(2, 0, 2, 0)
+        };
+        box.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 12F));
+        box.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        box.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        box.Controls.Add(new AntdUI.Panel
+        {
+            Dock = DockStyle.Fill,
+            Radius = 2,
+            Back = Style.Get(Colour.Primary),
+            Margin = new Padding(0, 7, 8, 7)
+        }, 0, 0);
+        box.Controls.Add(new AntdUI.Label
+        {
+            Text = title,
+            Font = F(10f, FontStyle.Bold),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 1, 0);
+        return box;
+    }
+
+    /*
+     * 标题栏状态胶囊 (SetHeaderStatus)
+     * 旧实现是一个固定宽度、纯色文字的状态标签; 改成"浅色底 + 同色描边 + 同色文字"的胶囊,
+     * 状态在标题栏里更醒目, 同时用 AntdUI 主题色, 明暗主题下都保持正确对比度
+     */
+    void SetHeaderStatus(string text, Color kindColor)
+    {
+        int kind = kindColor == Gn ? 1 : (kindColor == Or ? 2 : 0);
+        string label = text.Replace("●", "").Replace("(外部)", "外部").Trim();
+        if (label.Contains("外部")) label = "外部运行";
+        // Rs() 每 2 秒刷新一次, 状态没变就不重设颜色, 避免无意义的重绘
+        if (kind == _stKind && label == _stPillText) return;
+        _stKind = kind;
+        _stPillText = label;
+        ApplyHeaderStatusColor();
+    }
+
+    void ApplyHeaderStatusColor()
+    {
+        if (_stPill == null || _stPillLb == null || _stKind < 0) return;
+        Colour bg, bd, fg;
+        if (_stKind == 1) { bg = Colour.SuccessBg; bd = Colour.SuccessBorder; fg = Colour.Success; }
+        else if (_stKind == 2) { bg = Colour.WarningBg; bd = Colour.WarningBorder; fg = Colour.Warning; }
+        else { bg = Colour.ErrorBg; bd = Colour.ErrorBorder; fg = Colour.Error; }
+        try
+        {
+            _stPill.Back = Style.Get(bg);
+            _stPill.BorderColor = Style.Get(bd);
+            _stPillLb.ForeColor = Style.Get(fg);
+            _stPillLb.Text = _stPillText;
+        }
+        catch { }
     }
 
     /*
@@ -514,7 +739,7 @@ public partial class MainForm : AntdUI.Window
             WrapContents = false,
             Padding = new Padding(0, 7, 0, 0)
         };
-        var font = new Font("Microsoft YaHei UI", fs);
+        var font = F(fs);
         var sz = TextRenderer.MeasureText(t, font);
         var lb = new AntdUI.Label
         {
@@ -550,15 +775,15 @@ public partial class MainForm : AntdUI.Window
         var cap = new AntdUI.Label
         {
             Text = caption,
-            Font = new Font("Microsoft YaHei UI", 8.5f),
-            ForeColor = Color.FromArgb(130, 130, 130),
+            Font = F(9f),
+            ForeColor = Mute,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
         val = new AntdUI.Label
         {
             Text = "--",
-            Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold),
+            Font = F(15f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -580,12 +805,13 @@ public partial class MainForm : AntdUI.Window
         _root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1, RowCount = 3,
+            ColumnCount = 1, RowCount = 4,
             BackColor = Color.Transparent
         };
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));   // 标题栏
-        _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 主区域
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 210F));  // 日志条
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));    // 标题栏
+        _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));    // 主区域
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 6F));     // 日志区拖拽分隔条
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, _logExpandedH)); // 日志条
         Controls.Add(_root);
 
         // ============================================================
@@ -601,17 +827,38 @@ public partial class MainForm : AntdUI.Window
             DividerShow = true
         };
 
-        // 状态标签 (标题栏右侧) — 第一个添加 = 靠左; 右边距 3px 与"简"按钮隔开
-        lbStHd = new AntdUI.Label
+        // 状态胶囊 (标题栏右侧) — 浅色底 + 同色描边 + 同色文字
+        // 旧实现是固定宽度的纯色文字标签, 在标题栏里存在感很弱
+        var stWrap = new TableLayoutPanel
         {
             Dock = DockStyle.Right,
-            Width = 150,
-            Margin = new Padding(0, 0, 3, 0),
-            Text = "● 未运行",
-            ForeColor = Rd,
-            Font = new Font("Microsoft YaHei UI", 9f),
-            TextAlign = ContentAlignment.MiddleRight
+            Width = 116,
+            ColumnCount = 1, RowCount = 3,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
+        stWrap.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        stWrap.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        stWrap.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));
+        stWrap.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        _stPill = new AntdUI.Panel
+        {
+            Dock = DockStyle.Fill,
+            Radius = 13,
+            BorderWidth = 1F,
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        _stPillLb = new AntdUI.Label
+        {
+            Text = "未运行",
+            Font = F(9f, FontStyle.Bold),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        _stPill.Controls.Add(_stPillLb);
+        stWrap.Controls.Add(_stPill, 0, 1);
+        hd.Controls.Add(stWrap);
+        SetHeaderStatus("● 未运行", Rd);
 
         // 明暗主题切换按钮 — 最后一个添加 = 最右 (紧邻窗口按钮)
         btTheme = new AntdUI.Button
@@ -624,7 +871,8 @@ public partial class MainForm : AntdUI.Window
             IconSvg = "SunOutlined",
             ToggleIconSvg = "MoonOutlined",
             Toggle = false,
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            AccessibleName = "切换明暗主题"
         };
         btTheme.Click += (s, e) =>
         {
@@ -641,10 +889,12 @@ public partial class MainForm : AntdUI.Window
             Radius = 0,
             WaveSize = 0,
             Text = "典",
-            Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold),
-            Cursor = Cursors.Hand
+            Font = F(10f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            AccessibleName = "经典模式"
         };
         btCla.Click += (s, e) => OpenClassicMode();
+        Tip(btCla, "经典模式 — 旧版一站式布局");
 
         // 极简模式切换按钮 (打开独立的小窗口) — 位于明暗主题切换按钮左边
         btSize = new AntdUI.Button
@@ -655,19 +905,14 @@ public partial class MainForm : AntdUI.Window
             Radius = 0,
             WaveSize = 0,
             Text = "简",
-            Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold),
-            Cursor = Cursors.Hand
+            Font = F(10f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            AccessibleName = "极简模式"
         };
         btSize.Click += (s, e) => OpenMiniMode();
+        Tip(btSize, "极简模式 — 只保留开始游戏与存档切换");
+        Tip(btTheme, "切换明暗主题");
 
-        hd.Controls.Add(lbStHd);
-        // 3px 间距占位 — 让状态标签与"简"按钮保持间隔 (PageHeader 忽略 Margin)
-        hd.Controls.Add(new System.Windows.Forms.Panel
-        {
-            Dock = DockStyle.Right,
-            Width = 3,
-            BackColor = Color.Transparent
-        });
         hd.Controls.Add(btCla);
         hd.Controls.Add(btSize);
         hd.Controls.Add(btTheme);
@@ -742,6 +987,31 @@ public partial class MainForm : AntdUI.Window
         BuildTimePage();
         BuildLog();
 
+        // ============================================================
+        // ★ r2 日志分隔条 ★ — 上下拖动调整日志区高度 (双击复位)
+        // 旧实现日志区固定 210px, 即使没有日志也长期占掉四分之一窗口;
+        // 现在默认 170px, 且可拖拽/折叠, 把纵向空间还给页面内容
+        // ============================================================
+        var splitter = new LogSplitter { Dock = DockStyle.Fill };
+        splitter.Dragged += dy =>
+        {
+            var h = _root.RowStyles[3].Height + dy;
+            h = Math.Max(LogCollapsedH, Math.Min(420, h));
+            // 拖动时合并布局: 一次 MouseMove 只跑一轮排版, 避免日志区(含 RichTextBox)反复重排
+            _root.SuspendLayout();
+            _root.RowStyles[3].Height = h;
+            _root.ResumeLayout();
+            if (!_logCollapsed) _logExpandedH = (int)h;
+        };
+        splitter.DoubleClick += (s, e) =>
+        {
+            _logCollapsed = !_logCollapsed;
+            _root.RowStyles[3].Height = _logCollapsed ? LogCollapsedH : _logExpandedH;
+            if (rt != null) rt.Visible = !_logCollapsed;
+            if (btFold != null) btFold.IconSvg = _logCollapsed ? "UpOutlined" : "DownOutlined";
+        };
+        _root.Controls.Add(splitter, 0, 2);
+
         // 运行方式默认不勾选任何 DX 选项 (无选中 = 默认 DX9 运行)
         // (SelectIndex 赋值会触发 ApplyDx, 用 _dxReady 标志避免启动时
         //  自动删除/复制补丁文件, 一切由用户点击决定)
@@ -758,33 +1028,62 @@ public partial class MainForm : AntdUI.Window
         // 预布局隐藏页面 — WinForms 不会自动布局不可见控件,
         // 首次切换时才布局会导致明显卡顿 (表格等重控件需计算行高)。
         // 这里先把隐藏页面的尺寸设为目标尺寸并强制布局, 切换时即开即用。
+        SyncPageSizes();
+    }
+
+    /*
+     * 预布局全部页面 (SyncPageSizes) — 启动与窗口缩放结束时调用
+     * 隐藏页不会参与窗体布局, 若不主动按内容区尺寸预排, 缩放后第一次切过去
+     * 就要现场算一遍布局 (表格/流式按钮列表尤其明显) → 表现为"切页顿一下"
+     */
+    void SyncPageSizes()
+    {
         try
         {
-            var card = (AntdUI.Panel)main.Controls[1];
-            var cs = card.ClientSize;
-            pgArc.Size = cs;
-            pgUpd.Size = cs;
-            pgDash.Size = cs;
-            pgTsh.Size = cs;
-            pgDll.Size = cs;
-            pgTime.Size = cs;
-            pgArc.PerformLayout();
-            pgUpd.PerformLayout();
-            pgDash.PerformLayout();
-            pgTsh.PerformLayout();
-            pgDll.PerformLayout();
-            pgTime.PerformLayout();
+            if (_contentCard == null) return;
+            var cs = _contentCard.ClientSize;
+            if (cs.Width <= 0 || cs.Height <= 0) return;
+
+            // 内容区尺寸变了 → 旧快照比例不再匹配, 清空缓存 (下次切页重新抓帧)
+            if (_lastShotSize != cs)
+            {
+                _lastShotSize = cs;
+                DisposePageFade(cancelPending: true);
+                ClearPageShots();
+            }
+
+            var pages = new Control[] { pgDash, pgArc, pgDll, pgTime, pgUpd, pgHelp, pgTsh };
+            _contentCard.SuspendLayout();
+            foreach (var p in pages)
+            {
+                if (p == null) continue;
+                if (!p.Visible)
+                {
+                    if (p.Size != cs) p.Size = cs;
+                    p.PerformLayout();
+                }
+            }
+            _contentCard.ResumeLayout(false);
         }
         catch { }
     }
 
     /*
-     * 页面切换 (ShowPage) — 双缓冲 + 布局控制, 避免卡顿与残影
-     * 先挂起布局, 切换可见性后立即对目标页强制布局, 再恢复布局并重绘内容区
-     * (v2.16 曾加方向感知滑入/短距平移动效, 用户三轮实测后拍板纯硬切, 已完整回退)
+     * 页面切换 (ShowPage) — 交叉淡入 + 零重排切换
+     *
+     * v2.17 视觉升级:
+     *   1. 同一页重复点击直接忽略, 不再做无意义的重排
+     *   2. 切换前抓一帧旧页、切换后抓一帧新页, 叠加 130ms 静态淡出层
+     *      (动画期间不跑布局, 所以既有过渡感又不会像滑动动画那样拖慢)
+     *   3. 不再对整个内容卡片 Invalidate(true) 递归重绘 —
+     *      旧写法把侧栏之外的所有子控件全部标脏, 每次切页等于整页重画两遍
+     *   4. 截图失败时自动退化为原来的硬切, 不影响功能
      */
     void ShowPage(string tag)
     {
+        if (tag == _curPageTag) return;
+        _curPageTag = tag;
+
         Control target = tag switch
         {
             "archive" => (Control)pgArc,
@@ -796,7 +1095,60 @@ public partial class MainForm : AntdUI.Window
             _ => (Control)pgDash
         };
 
-        SuspendLayout();
+        // 先摘掉上一轮还没淡完的覆盖层, 否则截图会抓到残影
+        DisposePageFade(cancelPending: true);
+        _contentCard?.Update();
+
+        Bitmap shotBefore = _pageFadeReady ? CaptureContent() : null;
+
+        // ① 快照优先: 目标页有上次的画面 → 立刻播放"旧帧 → 目标快照"的淡入
+        //    (纯位图动画, 不做布局/重绘); 动画结束后再在快照背后完成真正的切页。
+        //    这样点击到画面变化只有几毫秒, 页面绘制被 130ms 动画完全遮住。
+        if (shotBefore != null && _pageShots.TryGetValue(target, out var cached)
+            && cached != null)
+        {
+            try
+            {
+                var ov = new PageFadeOverlay(shotBefore, cached, ownsAfter: false);
+                _pendingPage = target;
+                _switchAtFadeEnd = true;
+                _curPageControl = target;
+                AddFadeOverlay(ov);
+                StartFadeTimer();
+                return;
+            }
+            catch
+            {
+                _pendingPage = null;
+                _switchAtFadeEnd = false;
+                shotBefore.Dispose();
+            }
+        }
+
+        // ② 首次进入该页: 直接切换并绘制, 再对"旧帧 → 新页"做淡入
+        SwitchPages(target);
+        _curPageControl = target;
+        if (shotBefore == null) return;
+
+        _contentCard.Update();
+        var shotAfter = CaptureContent();
+        if (shotAfter == null) { shotBefore.Dispose(); return; }
+        CachePageShot(target, shotAfter);   // 缓存持有该位图
+        try
+        {
+            var ov = new PageFadeOverlay(shotBefore, shotAfter, ownsAfter: false);
+            AddFadeOverlay(ov);
+            StartFadeTimer();
+        }
+        catch { shotBefore.Dispose(); }
+    }
+
+    /* 真正的页面切换 (可见性 + 目标页布局 + 标脏) — 供直接切换/动画结束回调共用 */
+    void SwitchPages(Control target)
+    {
+        // 只挂起内容卡片的布局 — 旧写法 SuspendLayout() 挂起整个窗体,
+        // 切换后会导致标题栏/侧栏/日志条一起重排重绘
+        _contentCard.SuspendLayout();
         foreach (var c in new Control[] { pgDash, pgArc, pgDll, pgTime, pgUpd, pgHelp, pgTsh })
         {
             bool show = c == target;
@@ -806,8 +1158,307 @@ public partial class MainForm : AntdUI.Window
                 if (show) c.PerformLayout();   // 强制完成目标页布局, 避免显示时的延迟布局卡顿
             }
         }
-        ResumeLayout(true);
-        // 只重绘内容区, 避免全窗口无效化造成的卡顿 (侧边栏/标题栏/日志条无需重绘)
-        if (target.Parent != null) target.Parent.Invalidate(true);
+        _contentCard.ResumeLayout(true);
+        target.Invalidate();   // 只标脏目标页自身, 不递归
+    }
+
+    void AddFadeOverlay(PageFadeOverlay ov)
+    {
+        _pageFade = ov;
+        _pageFadeStep = 0;
+        _contentCard.Controls.Add(ov);
+        ov.BringToFront();
+        ov.Update();   // 第一帧立即上屏, 不等下一轮消息循环
+    }
+
+    void StartFadeTimer()
+    {
+        if (_pageFadeTimer == null)
+        {
+            _pageFadeTimer = new Timer { Interval = 16 };
+            _pageFadeTimer.Tick += (s, e) =>
+            {
+                _pageFadeStep++;
+                if (_pageFadeStep >= PageFadeFrames)
+                {
+                    // 快照优先模式: 此时画面完全由最后一帧快照覆盖, 在背后完成切页与绘制
+                    if (_switchAtFadeEnd && _pendingPage != null)
+                    {
+                        var t = _pendingPage;
+                        _pendingPage = null;
+                        _switchAtFadeEnd = false;
+                        try { SwitchPages(t); _contentCard.Update(); } catch { }
+                    }
+                    DisposePageFade();
+                    SchedulePageShotRefresh();
+                    return;
+                }
+                if (_pageFade is PageFadeOverlay o)
+                {
+                    float t = (float)_pageFadeStep / PageFadeFrames;
+                    o.Alpha = (1f - t) * (1f - t);   // ease-out
+                    o.Invalidate();
+                }
+            };
+        }
+        _pageFadeTimer.Start();
+    }
+
+    /*
+     * 动画结束后刷新当前页的快照缓存
+     * 晚一拍执行: 等覆盖层移除、真实页面露出后再抓帧, 避免把叠加层截进去;
+     * 期间如果又开始了新过渡则放弃 (新过渡会自己抓帧)
+     */
+    void SchedulePageShotRefresh()
+    {
+        var page = _curPageControl;
+        if (page == null) return;
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (_pageFade != null || page != _curPageControl) return;
+                try { _contentCard.Update(); } catch { }   // 确保真实页面已上屏再抓帧
+                var bmp = CaptureContent();
+                if (bmp != null) CachePageShot(page, bmp);
+            }));
+        }
+        catch { }
+    }
+
+    void CachePageShot(Control page, Bitmap bmp)
+    {
+        if (page == null || bmp == null) return;
+        if (_pageShots.TryGetValue(page, out var old) && old != null)
+        {
+            _pageShots.Remove(page);
+            _pageShotOrder.Remove(page);
+            old.Dispose();
+        }
+        _pageShots[page] = bmp;
+        _pageShotOrder.Add(page);
+
+        while (_pageShotOrder.Count > PageShotCacheMax)
+        {
+            var evict = _pageShotOrder[0];
+            _pageShotOrder.RemoveAt(0);
+            if (_pageShots.TryGetValue(evict, out var b))
+            {
+                _pageShots.Remove(evict);
+                b?.Dispose();
+            }
+        }
+    }
+
+    /* 尺寸/主题变化后旧快照失效 — 清空并释放 */
+    void ClearPageShots()
+    {
+        foreach (var b in _pageShots.Values) b?.Dispose();
+        _pageShots.Clear();
+        _pageShotOrder.Clear();
+    }
+
+    /* 抓取内容区当前画面 (屏幕像素) — 失败返回 null, 由调用方退化为硬切 */
+    Bitmap CaptureContent()
+    {
+        try
+        {
+            var card = _contentCard;
+            if (card == null || !card.IsHandleCreated || !card.Visible) return null;
+            if (card.Width < 32 || card.Height < 32) return null;
+            var bmp = new Bitmap(card.Width, card.Height, PixelFormat.Format32bppPArgb);
+            if (HeadlessMode)
+            {
+                // 无头窗口在屏幕外, CopyFromScreen 只能抓到黑屏 → 用控件自绘抓帧
+                card.DrawToBitmap(bmp, new Rectangle(0, 0, card.Width, card.Height));
+                return bmp;
+            }
+            using var g = Graphics.FromImage(bmp);
+            g.CopyFromScreen(card.PointToScreen(Point.Empty), Point.Empty, card.Size, CopyPixelOperation.SourceCopy);
+            return bmp;
+        }
+        catch { return null; }
+    }
+
+    /* 移除淡入层; cancelPending = 取消尚未执行的"动画结束后切页" */
+    void DisposePageFade(bool cancelPending = false)
+    {
+        _pageFadeTimer?.Stop();
+        if (cancelPending)
+        {
+            _pendingPage = null;
+            _switchAtFadeEnd = false;
+        }
+        if (_pageFade == null) return;
+        var c = _pageFade;
+        _pageFade = null;
+        try
+        {
+            if (c.Parent != null) c.Parent.Controls.Remove(c);
+            c.Dispose();
+        }
+        catch { }
+        // 移除后露出真正的页面, 主动刷新一次避免残留旧像素
+        try { _contentCard?.Invalidate(); } catch { }
+    }
+
+    /* 透明叠层: 先画新页位图, 再按递减 alpha 画旧页位图 = 真正的交叉淡入 */
+    sealed class PageFadeOverlay : Control
+    {
+        readonly Bitmap _before, _after;
+        bool _dead;
+        public float Alpha = 1f;
+
+        readonly bool _ownsAfter;
+
+        public PageFadeOverlay(Bitmap before, Bitmap after, bool ownsAfter)
+        {
+            _before = before;
+            _after = after;
+            _ownsAfter = ownsAfter;
+            Dock = DockStyle.Fill;
+            Enabled = false;                       // 淡入期间不拦截点击
+            TabStop = false;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer
+                | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.UserPaint, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            if (_dead) return;
+            if (_after != null)
+                e.Graphics.DrawImageUnscaled(_after, Point.Empty);
+            if (_before == null || Alpha <= 0f) return;
+
+            using var ia = new ImageAttributes();
+            ia.SetColorMatrix(new ColorMatrix
+            {
+                Matrix00 = 1f, Matrix11 = 1f, Matrix22 = 1f,
+                Matrix33 = Math.Min(1f, Alpha), Matrix44 = 1f
+            });
+            e.Graphics.DrawImage(_before,
+                new Rectangle(0, 0, Width, Height),
+                0, 0, _before.Width, _before.Height,
+                GraphicsUnit.Pixel, ia);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e) { }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _dead = true;
+                _before?.Dispose();
+                if (_ownsAfter) _after?.Dispose();   // 缓存位图由快照缓存统一管理
+            }
+            base.Dispose(disposing);
+        }
+    }
+
+    // =================================================================
+    // 无头自测钩子 — 仅供 ServerUI.Headless 测试程序集调用, 不参与界面逻辑
+    // (让 UI 布局与页面切换可以在不弹窗、不提权的情况下被验证)
+    // =================================================================
+    internal static bool HeadlessMode = false;
+
+    internal void HeadlessShowPage(string tag) => ShowPage(tag);
+
+    /* 无头自测: 打开截图淡入/快照切页 (用 DrawToBitmap 抓帧代替屏幕抓取) */
+    internal void HeadlessEnableTransition() => _pageFadeReady = true;
+
+    internal int HeadlessPageShotCount => _pageShots.Count;
+
+    internal string HeadlessVisiblePage()
+    {
+        if (pgDash.Visible) return "dash";
+        if (pgArc.Visible) return "archive";
+        if (pgDll.Visible) return "dll";
+        if (pgTime.Visible) return "time";
+        if (pgUpd.Visible) return "about";
+        if (pgHelp.Visible) return "help";
+        if (pgTsh.Visible) return "tsh";
+        return "none";
+    }
+
+    /* 无头自测: 只做本地状态刷新 (读 ini / 存档目录), 不联网 */
+    internal void HeadlessRefresh()
+    {
+        CheckDnfExists();
+        Rf();
+    }
+
+    internal Control[] HeadlessPages => new Control[]
+        { pgDash, pgArc, pgDll, pgTime, pgUpd, pgHelp, pgTsh };
+
+    internal string HeadlessDiagnostics()
+    {
+        var ini = Path.Combine(_gr, "GameGaurd.ini");
+        var sb = new StringBuilder();
+        sb.AppendLine("_ad=" + _ad);
+        sb.AppendLine("_gr=" + _gr);
+        sb.AppendLine("ini=" + ini);
+        sb.AppendLine("ini-exists=" + File.Exists(ini));
+        sb.AppendLine("patch-installed=" + _patchInstalled);
+        sb.AppendLine("dll-rows-built=" + _dllRowsBuilt);
+        sb.AppendLine("cust-rows=" + _custRows.Count);
+        sb.AppendLine("swCust=" + _swCust.Count);
+        sb.AppendLine("is-light=" + Config.IsLight);
+        sb.AppendLine("theme-text=" + Style.Get(Colour.Text));
+        return sb.ToString();
+    }
+
+    /*
+     * 日志区拖拽分隔条 (LogSplitter)
+     * 5px 高的透明条, 悬停/拖动时显示主题色短线, 双击复位 (由调用方处理)
+     */
+    sealed class LogSplitter : Control
+    {
+        bool _hot, _drag;
+        int _lastY;
+        public event Action<int> Dragged;
+
+        public LogSplitter()
+        {
+            Cursor = Cursors.SizeNS;
+            TabStop = false;
+            Height = 6;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer
+                | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.UserPaint, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var color = (_hot || _drag) ? Style.Get(Colour.Primary) : Style.Get(Colour.Split);
+            using var pen = new Pen(color, 1f);
+            int y = Height / 2;
+            int w = Math.Min(56, Math.Max(16, Width / 12));
+            e.Graphics.DrawLine(pen, (Width - w) / 2, y, (Width + w) / 2, y);
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { _hot = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hot = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left) { _drag = true; _lastY = Cursor.Position.Y; Capture = true; Invalidate(); }
+            base.OnMouseDown(e);
+        }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (_drag)
+            {
+                int y = Cursor.Position.Y;
+                int dy = y - _lastY;
+                if (dy != 0) { _lastY = y; Dragged?.Invoke(dy); }
+            }
+            base.OnMouseMove(e);
+        }
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            if (_drag) { _drag = false; Capture = false; Invalidate(); }
+            base.OnMouseUp(e);
+        }
     }
 }

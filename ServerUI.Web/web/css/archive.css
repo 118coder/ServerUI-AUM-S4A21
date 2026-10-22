@@ -1,0 +1,117 @@
+/* ==========================================================================
+   archive.css — 存档管理页（Phase 2 · B）
+   行序与旧 BuildArchive 一致：页头 58 / 信息栏 44 / 常用操作 / 目录访问 / 列表 / 拖拽区
+   ========================================================================== */
+
+.arc-page {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ---------- 信息栏（当前 / 备份数 / 清理冗余DB / 刷新存档） ---------- */
+.arc-info {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 6px 14px;
+}
+.arc-info .arc-kv { display: inline-flex; align-items: center; font-size: var(--fs-body); min-width: 0; }
+.arc-info .arc-kv .k { color: var(--muted); }
+.arc-info .arc-kv .v {
+  color: var(--text);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+.arc-info .arc-spacer { flex: 1 1 auto; }
+
+/* ---------- 常用操作 / 目录访问 ---------- */
+.arc-ops {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap-card);
+  margin-top: var(--gap-card);
+}
+/* 旧 UI 这四个按钮占满 60px 行高，比通用 .btn 更高更醒目 */
+.arc-ops .btn { height: 44px; font-size: var(--fs-btn); }
+.arc-ops .btn svg { width: 15px; height: 15px; flex: 0 0 15px; }
+.arc-dirs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-card); margin-top: var(--gap-card); }
+.arc-dirs .btn { width: 100%; }
+
+/* ---------- 列表（sticky 表头，行高 40） ---------- */
+.arc-tbl-wrap {
+  flex: 1 1 auto;
+  min-height: 120px;
+  margin-top: var(--gap-card);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.arc-tbl { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.arc-tbl thead th { position: sticky; top: 0; z-index: 1; }
+.arc-tbl thead th.arc-thsort { text-align: center; }
+.arc-tbl thead th.arc-thsort .arrow { display: inline-block; margin-left: 3px; }
+/* 行高严格 40px：分隔线用 inset 阴影画，避免 1px 边框把行撑成 41px */
+.arc-tbl tbody td { height: 40px; border-bottom: 0; box-shadow: inset 0 -1px 0 0 var(--border); }
+/* 选中行：3px 蓝条只画在首列（逐 td 画会在每列左边都出现一条） */
+.arc-tbl tbody tr.active td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--primary), inset 0 -1px 0 0 var(--border);
+}
+.arc-tbl thead th { border-bottom: 1px solid var(--border); }
+/* 「使用中」的存档：整行淡蓝底 + 名称加粗，提示这是当前 Data 目录内容 */
+.arc-tbl tbody tr.current td { background: rgba(22, 104, 220, .10); }
+html[data-theme="light"] .arc-tbl tbody tr.current td { background: rgba(33, 150, 243, .10); }
+.arc-tbl tbody tr.current td.arc-name .arc-nm { color: var(--primary); }
+/* 名称单元格用内层 flex：td 本身保持 table-cell（固定列宽才生效） */
+.arc-tbl td.arc-name { padding: 0 10px; }
+.arc-tbl td.arc-name .arc-name-in {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+}
+.arc-tbl .arc-nm {
+  font-family: var(--font);
+  font-weight: 600;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arc-tbl .pill { height: 18px; padding: 0 7px; font-size: 10.5px; flex: 0 0 auto; }
+.arc-tbl .arc-empty { padding: 26px 10px; color: var(--faint); font-size: var(--fs-small); text-align: center; }
+
+/* ---------- 拖拽区 ---------- */
+.arc-drop {
+  flex: 0 0 auto;
+  margin-top: var(--gap-card);
+  height: 62px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-2);
+  transition: border-color var(--t-hover) ease, background-color var(--t-hover) ease, color var(--t-hover) ease;
+}
+.arc-drop .arc-drop-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-body); }
+.arc-drop .arc-drop-row svg { width: 15px; height: 15px; flex: 0 0 15px; color: var(--primary); }
+.arc-drop .arc-drop-note { font-size: var(--fs-small); color: var(--faint); }
+.arc-drop:hover { border-color: var(--primary); color: var(--text); }
+.arc-drop.over { border-color: var(--primary); background: var(--surface-2); color: var(--text); }
+
+/* 操作中：淡出操作按钮，避免重复触发（实际拦截在 JS 的 withBusy） */
+.arc-page.busy { cursor: progress; }
+.arc-page.busy .arc-ops button,
+.arc-page.busy .arc-dirs button,
+.arc-page.busy .arc-info button { opacity: .45; pointer-events: none; }

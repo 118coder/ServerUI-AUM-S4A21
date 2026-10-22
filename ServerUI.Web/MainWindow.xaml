@@ -1,0 +1,113 @@
+<Window x:Class="ServerUI.Web.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="ServerS4A21 管理器"
+        Width="1280" Height="840"
+        MinWidth="1080" MinHeight="700"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        Background="#141414"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        SourceInitialized="Window_SourceInitialized"
+        StateChanged="Window_StateChanged"
+        Closing="Window_Closing">
+  <WindowChrome.WindowChrome>
+    <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" CornerRadius="0" GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
+  </WindowChrome.WindowChrome>
+  <Grid x:Name="RootGrid" Background="#141414" AllowDrop="True" Drop="OnFileDrop" DragOver="OnFileDragOver">
+    <Border x:Name="RootBorder" Background="#141414" BorderBrush="#2B2B2B" BorderThickness="1">
+      <Grid>
+        <wv2:WebView2 x:Name="Web" DefaultBackgroundColor="#FF141414"/>
+        <!--
+          启动动画：只用 Opacity / RenderTransform（合成层属性），不触碰布局，
+          因此每帧成本恒定；WebView2 初始化期间也保持流畅。
+          初始态全部为 opacity=0 / scale<1，避免首帧闪出终态。
+        -->
+        <Border x:Name="Splash" Background="#141414">
+          <Grid x:Name="SplashContent" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+              <ScaleTransform x:Name="SplashContentScale" ScaleX="1" ScaleY="1"/>
+            </Grid.RenderTransform>
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+              <Grid Width="78" Height="78" HorizontalAlignment="Center" Margin="0,0,0,24">
+                <Ellipse x:Name="SplashRing" Stroke="#2B2B2B" StrokeThickness="2" Opacity="0.7"/>
+                <!-- 单段圆弧：虚线 = 弧长 + 余量，绕圆心旋转形成扫光 -->
+                <Ellipse x:Name="SplashArc" Stroke="#1668DC" StrokeThickness="2"
+                         StrokeDashArray="24 92" StrokeDashCap="Round" Opacity="0.9"
+                         RenderTransformOrigin="0.5,0.5">
+                  <Ellipse.RenderTransform>
+                    <RotateTransform x:Name="SplashArcRotate" Angle="0"/>
+                  </Ellipse.RenderTransform>
+                </Ellipse>
+                <Border x:Name="SplashMark" Width="44" Height="44" CornerRadius="12"
+                        Background="#1C1C1C" BorderBrush="#2B2B2B" BorderThickness="1" Opacity="1"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        RenderTransformOrigin="0.5,0.5">
+                  <Border.RenderTransform>
+                    <ScaleTransform x:Name="SplashMarkScale" ScaleX="1" ScaleY="1"/>
+                  </Border.RenderTransform>
+                  <TextBlock x:Name="SplashMarkText" Text="S" FontFamily="Microsoft YaHei UI, Segoe UI"
+                             FontSize="21" FontWeight="Bold" Foreground="#1668DC"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+              </Grid>
+
+              <TextBlock x:Name="SplashTitle" Text="ServerS4A21 管理器" Opacity="0"
+                         FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="15" FontWeight="SemiBold"
+                         Foreground="#DCDCDC" HorizontalAlignment="Center">
+                <TextBlock.RenderTransform>
+                  <TranslateTransform x:Name="SplashTitleShift" Y="8"/>
+                </TextBlock.RenderTransform>
+              </TextBlock>
+              <TextBlock x:Name="SplashSub" Text="正在启动界面…" Opacity="0" Margin="0,7,0,0"
+                         FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="12"
+                         Foreground="#8C8C94" HorizontalAlignment="Center">
+                <TextBlock.RenderTransform>
+                  <TranslateTransform x:Name="SplashSubShift" Y="8"/>
+                </TextBlock.RenderTransform>
+              </TextBlock>
+
+              <Border x:Name="SplashTrack" Width="176" Height="3" CornerRadius="2"
+                      Background="#2B2B2B" Margin="0,24,0,0" Opacity="0">
+                <Border x:Name="SplashBar" CornerRadius="2" Background="#1668DC"
+                        RenderTransformOrigin="0,0.5">
+                  <Border.RenderTransform>
+                    <ScaleTransform x:Name="SplashBarScale" ScaleX="0" ScaleY="1"/>
+                  </Border.RenderTransform>
+                </Border>
+              </Border>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <!-- WebView2 运行时缺失 / 界面初始化失败：主题化兜底，不弹系统 MessageBox -->
+        <Border x:Name="Fallback" Background="#141414" Visibility="Collapsed">
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="620" Margin="32">
+            <Border Width="44" Height="44" CornerRadius="10" Background="#1C1C1C" BorderBrush="#2B2B2B" BorderThickness="1"
+                    HorizontalAlignment="Center" Margin="0,0,0,20">
+              <TextBlock Text="!" FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="20" FontWeight="Bold"
+                         Foreground="#DC4446" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBlock Text="无法启动界面" FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="18" FontWeight="SemiBold"
+                       Foreground="#DCDCDC" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+            <TextBlock x:Name="FallbackText" TextWrapping="Wrap" TextAlignment="Center"
+                       FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="12.5" Foreground="#B8B8C0"
+                       Margin="0,0,0,20"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+              <Button x:Name="FallbackDownload" Content="下载 WebView2 运行时" Click="FallbackDownload_Click"
+                      Background="#1668DC" Foreground="#FFFFFF" BorderThickness="0" Padding="18,9"
+                      FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="12.5" Cursor="Hand"/>
+              <Button Content="退出" Click="FallbackQuit_Click" Margin="12,0,0,0"
+                      Background="#1C1C1C" Foreground="#DCDCDC" BorderBrush="#2B2B2B" BorderThickness="1" Padding="18,9"
+                      FontFamily="Microsoft YaHei UI, Segoe UI" FontSize="12.5" Cursor="Hand"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

@@ -1,0 +1,319 @@
+/* ==========================================================================
+   overlays.css — 覆盖层组件（右键菜单 / 文件浏览器 / INI 分组编辑器 / 输入框 / 列表选择）
+   层级：右键菜单 1080 > 覆盖层 980（< .modal-mask 1000，保证内嵌模态在最上层）
+   ========================================================================== */
+
+/* ---------- 右键菜单 ---------- */
+.menu.ctx-menu { z-index: 1080; outline: none; }
+.menu.ctx-menu .menu-item { cursor: pointer; }
+.menu.ctx-menu .menu-item.hot { background: var(--surface-3); color: var(--text); }
+.menu.ctx-menu .menu-item.danger.hot { background: var(--danger); color: #FFFFFF; }
+.menu.ctx-menu .menu-item.disabled.hot { background: transparent; color: var(--text-2); }
+
+/* ---------- 覆盖层骨架 ---------- */
+.ov-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 980;
+  background: rgba(0, 0, 0, .55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+html[data-theme="light"] .ov-mask { background: rgba(0, 0, 0, .32); }
+.ov-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  min-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ov-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ov-title { flex: 1 1 auto; font-size: 14px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-head-extra { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.ov-head .ov-close { font-size: 15px; line-height: 1; }
+.ov-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 14px; }
+.ov-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- 输入框（prompt） ---------- */
+.ov-panel.ov-prompt { width: 440px; }
+.ov-panel.ov-pick { width: 540px; }
+.prompt-body { display: flex; flex-direction: column; gap: 10px; }
+.prompt-body .p-note { font-size: var(--fs-small); color: var(--muted); line-height: 1.7; }
+.prompt-body .field.pf-field { gap: 8px; }
+.prompt-body .field.pf-field > label { width: 62px; flex: 0 0 62px; font-size: var(--fs-small); }
+.prompt-body input {
+  flex: 1 1 auto;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-family: var(--font);
+}
+.prompt-body input:focus { outline: none; border-color: var(--primary); }
+
+/* ---------- 文件浏览器 ---------- */
+.ov-panel.ov-fb { width: 920px; height: 620px; }
+/* 覆盖层内部改为纵向 flex：工具条固定，列表自己滚动（不靠外层滚动条） */
+.ov-panel.ov-fb .ov-body { display: flex; flex-direction: column; overflow: hidden; }
+.fb-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;            /* 窄面板时允许换行，绝不把控件顶出面板 */
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.fb-bar .fb-label { font-size: var(--fs-small); color: var(--muted); white-space: nowrap; }
+.fb-bar .dropdown { min-width: 170px; max-width: 220px; flex: 0 1 auto; }
+.fb-bar .dropdown .dd-face { height: 30px; }
+.fb-bar .fb-spacer { flex: 1 1 auto; }
+.fb-bar .fb-filter { font-size: var(--fs-small); color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+.fb-path {
+  flex: 1 1 220px;
+  min-width: 120px;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+}
+.fb-path:focus { outline: none; border-color: var(--primary); }
+
+.fb-err {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--danger);
+  background: var(--surface-2);
+  border-radius: var(--r-input);
+  font-size: var(--fs-small);
+  color: var(--danger);
+}
+.fb-listhead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 8px;
+  height: 24px;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background: var(--surface-2);
+}
+.fb-listhead .fb-h-name { flex: 1 1 auto; min-width: 0; }
+.fb-listhead .fb-h-type { flex: 0 0 64px; text-align: right; }
+.fb-listhead .fb-h-mod { flex: 0 0 108px; text-align: right; }
+
+.fb-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 4px;
+}
+.fb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-input);
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  cursor: default;
+}
+.fb-row:hover { background: var(--surface-2); color: var(--text); }
+.fb-row.sel { background: var(--surface-3); color: var(--text); box-shadow: inset 3px 0 0 0 var(--primary); }
+.fb-row svg { width: 13px; height: 13px; flex: 0 0 13px; }
+.fb-row.dir svg { color: var(--primary); }
+.fb-row .fb-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-row .fb-meta { flex: 0 0 auto; font-size: var(--fs-small); color: var(--muted); font-family: var(--font-mono); }
+.fb-row .fb-type { width: 64px; text-align: right; }
+.fb-row .fb-date { width: 108px; text-align: right; }
+.fb-empty, .fb-loading { padding: 22px 8px; text-align: center; font-size: var(--fs-small); color: var(--faint); }
+.fb-save { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.fb-save .fb-label { font-size: var(--fs-small); color: var(--muted); white-space: nowrap; }
+.fb-save input {
+  flex: 1 1 auto;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+.fb-save input:focus { outline: none; border-color: var(--primary); }
+
+/* ---------- INI 分组编辑器 ---------- */
+.ov-panel.ov-ini { width: 940px; height: 640px; }
+.ini-tip { font-size: var(--fs-small); color: var(--muted); line-height: 1.7; }
+.ini-wrap {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 6px 8px;
+}
+.ini-sec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.ini-sec .ini-sec-name { font-size: 12.5px; font-weight: 700; color: var(--primary); }
+.ini-sec .ini-sec-spacer { flex: 1 1 auto; }
+.ini-sec .ini-sec-pad { width: 88px; flex: 0 0 88px; }
+.ini-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 2px;
+}
+.ini-row:hover { background: var(--surface-2); }
+.ini-row .ini-key {
+  flex: 0 0 190px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ini-row .ini-ctl { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
+.ini-row .ini-del {
+  flex: 0 0 auto;
+  min-width: 56px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-input);
+  border: 1px solid var(--border);
+  color: var(--danger);
+  /* 11px 的中文在这里笔画会糊成一团，单独提到 12px */
+  font-size: 12px;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+.ini-row .ini-del:hover { border-color: var(--danger); background: var(--surface-3); }
+.ini-note { font-size: 11px; color: var(--faint); padding: 2px 2px 2px 4px; line-height: 1.6; }
+.ini-blank { height: 8px; }
+.ini-text {
+  flex: 1 1 auto;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+.ini-text:focus { outline: none; border-color: var(--primary); }
+.ini-numbox { display: flex; align-items: center; gap: 6px; }
+.ini-num {
+  width: 220px;
+  height: 28px;
+  padding: 0 8px;
+  text-align: right;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+}
+.ini-num:focus { outline: none; border-color: var(--primary); }
+.ini-steps { display: flex; flex-direction: column; gap: 2px; width: 24px; flex: 0 0 24px; }
+.ini-step {
+  width: 24px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 8px;
+  color: var(--text-2);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+/* 自绘箭头：hover 必须有明显背景，不能像原生 spinner */
+.ini-step:hover { color: var(--text); border-color: var(--primary); background: var(--surface-2); }
+.ini-step:active { background: var(--surface-3); }
+.ini-empty { padding: 18px 6px; color: var(--faint); font-size: var(--fs-small); text-align: center; }
+.ini-foot-spacer { flex: 1 1 auto; }
+.ov-foot .ini-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 列表选择（删除扩展） ---------- */
+.pick-note { font-size: var(--fs-small); color: var(--muted); line-height: 1.7; }
+.pick-list {
+  margin-top: 10px;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 4px;
+}
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--r-input);
+  cursor: default;
+}
+.pick-row:hover { background: var(--surface-2); }
+.pick-row.sel { background: var(--surface-3); box-shadow: inset 3px 0 0 0 var(--primary); }
+.pick-row .pick-radio {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+}
+.pick-row.sel .pick-radio { border-color: var(--primary); background: var(--primary); }
+.pick-main { min-width: 0; }
+.pick-name { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.pick-name.missing { color: var(--danger); }
+.pick-desc { font-size: var(--fs-small); color: var(--muted); }
+.pick-foot { margin-top: 10px; }

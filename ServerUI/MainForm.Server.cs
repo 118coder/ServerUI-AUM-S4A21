@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.VisualBasic;
@@ -32,6 +33,10 @@ public partial class MainForm : AntdUI.Window
         _pt = new Timer { Interval = 500 };
         _pt.Tick += (s, e) =>
         {
+            // 空闲时不做任何 UI 赋值 — 旧实现 500ms 一次无条件刷新隐藏中的
+            // 进度条与百分比标签, 让整个进程永远无法真正空转 (笔电耗电/风扇噪声来源之一)
+            if (pb == null || pb.IsDisposed || !pb.Visible) return;
+
             // ===== v2.15 真实里程碑跟随 =====
             // _stepTarget 只由 update.ps1 的真实节点驱动(源预检8/下载20/同步30/
             // 编译产物落盘62·72·80/日志87-95), 显示值永不越过最新真实节点:
@@ -272,6 +277,29 @@ public partial class MainForm : AntdUI.Window
      */
     const int LogFlushMaxLines = 200;
 
+    // 加粗日志字体 (旧实现每条加粗日志 new Font 一次且不释放 → 更新期间 GDI 句柄持续增长)
+    Font _logBold;
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+    static extern int SetWindowTheme(IntPtr hWnd, string subApp, string subId);
+
+    const int WM_SETREDRAW = 0x000B;
+
+    /*
+     * 日志滚动条主题 (ApplyLogTheme) — RichTextBox 是原生控件, 滚动条默认按系统浅色绘制,
+     * 在深色日志区里会出现一条刺眼的白色滚动条; Win10 1809+ 可用 DarkMode_Explorer 让
+     * 系统按暗色绘制 (不支持的旧系统上该调用无效, 不会报错)
+     */
+    internal void ApplyLogTheme()
+    {
+        if (rt == null || rt.IsDisposed || !rt.IsHandleCreated) return;
+        try { SetWindowTheme(rt.Handle, Config.IsLight ? "Explorer" : "DarkMode_Explorer", null); }
+        catch { }
+    }
+
     void FlushLog()
     {
         if (rt == null || rt.IsDisposed) return;
@@ -285,25 +313,45 @@ public partial class MainForm : AntdUI.Window
         }
 
         bool follow = IsLogAtBottom();
+        // 关闭重绘 → 整批写完 → 打开重绘并刷新一次:
+        // 旧实现每 AppendText 一次都会触发一次 RichTextBox 排版+绘制, 200 行就是 400 次
+        bool redrawOff = false;
         try
         {
+            if (rt.IsHandleCreated)
+            {
+                SendMessage(rt.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+                redrawOff = true;
+            }
+            _logBold ??= new Font(rt.Font, FontStyle.Bold);
+
             foreach (var (m, c, bold) in batch)
             {
                 var ts = "[" + DateTime.Now.ToString("HH:mm:ss") + "] ";
                 _logBuilder.AppendLine(ts + m);
                 rt.SelectionStart = rt.TextLength;
                 rt.SelectionLength = 0;
-                rt.SelectionFont = rt.Font;
+                rt.SelectionFont = bold ? _logBold : rt.Font;
                 rt.SelectionColor = Color.FromArgb(240, 240, 245);
                 rt.AppendText(ts);
-                if (bold) rt.SelectionFont = new Font(rt.Font, FontStyle.Bold);
                 rt.SelectionColor = c;
                 rt.AppendText(m + "\n");
             }
             if (rt.TextLength > LogMaxChars) TrimLog(LogKeepChars);
+            // _logBuilder 旧实现只增不减: 长时间挂机后内存里堆着完整历史, 与界面保留量脱节
+            if (_logBuilder.Length > LogMaxChars)
+                _logBuilder.Remove(0, _logBuilder.Length - LogKeepChars);
             if (follow) rt.ScrollToCaret();
         }
         catch { }
+        finally
+        {
+            if (redrawOff)
+            {
+                SendMessage(rt.Handle, WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
+                rt.Invalidate();
+            }
+        }
     }
 
     /*
@@ -977,8 +1025,7 @@ public partial class MainForm : AntdUI.Window
 
         lbSt.Text = stText;
         lbSt.ForeColor = stColor;
-        lbStHd.Text = stText;
-        lbStHd.ForeColor = stColor;
+        SetHeaderStatus(stText, stColor);
 
         // 更新 PVF 状态
         var pvfOk = _sv.PvfExists(

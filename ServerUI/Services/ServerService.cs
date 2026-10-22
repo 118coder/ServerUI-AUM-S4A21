@@ -51,6 +51,8 @@ public class ServerService
     // nCmdShow 常用值: 0=SW_HIDE(隐藏), 1=SW_NORMAL(正常), 2=SW_MINIMIZE(最小化)
     [DllImport("user32.dll")]
     static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("kernel32.dll")]
+    static extern IntPtr GetConsoleWindow();
 
     // ===== 控制台 API (优雅停服用) =====
     // DfoServer 是控制台程序, 提示 "Press 's' for statistics, 'q' to quit",
@@ -239,7 +241,12 @@ public class ServerService
                 FileName = bat,
                 WorkingDirectory = baseDir,
                 UseShellExecute = false,
-                CreateNoWindow = false   // 与手动双击一致, 保证 DfoServer 有真实控制台
+                // 不能 CreateNoWindow=true：DfoServer 需要真实控制台（无控制台会启动即崩），
+                // 但窗口必须不可见 —— 用 WindowStyle=Hidden 让控制台存在但显示状态为隐藏。
+                // 旧做法（CreateNoWindow=false + 事后 ShowWindow(MainWindowHandle)）不可靠：
+                // 控制台窗口属于 conhost，cmd 的 MainWindowHandle 经常是 0，永远等不到句柄。
+                CreateNoWindow = false,
+                WindowStyle = ProcessWindowStyle.Hidden
             },
             EnableRaisingEvents = true
         };
@@ -267,7 +274,8 @@ public class ServerService
 
         _batProcess.Start();
 
-        // v2.1-3 快速隐藏: 控制台窗口出现后立即隐藏（不必等 Play 的 10 秒兜底任务）
+        // 兜底隐藏: WindowStyle=Hidden 已在创建时隐藏控制台；这里再尝试一次，
+        // 覆盖极少数忽略 STARTUPINFO.wShowWindow 的环境。
         // cmd 与 DfoServer 共享同一控制台: 隐藏 cmd 主窗口即隐藏整个共享控制台;
         // 进程已退出时 MainWindowHandle 访问会抛异常, 由 try/catch 兜底。
         if (!_batProcess.HasExited)
@@ -279,13 +287,13 @@ public class ServerService
                     var deadline = DateTime.UtcNow.AddSeconds(5);
                     while (DateTime.UtcNow < deadline)
                     {
-                        System.Threading.Thread.Sleep(60);
-                        var hwnd = _batProcess.MainWindowHandle;
-                        if (hwnd != IntPtr.Zero)
-                        {
-                            ShowWindow(hwnd, 0);
-                            break;
-                        }
+                        System.Threading.Thread.Sleep(120);
+                        int pid;
+                        try { pid = _batProcess.Id; } catch { break; }
+                        // WindowStyle=Hidden 已让窗口不可见；这里只在控制台已出现时补一刀。
+                        // AttachConsole 会短暂把本进程挂到子控制台，拿到句柄后立刻 FreeConsole。
+                        HideConsoleOfProcess(pid, out bool found);
+                        if (found) break;
                     }
                 }
                 catch { }
@@ -523,13 +531,40 @@ public class ServerService
         try
         {
             if (_batProcess != null && !_batProcess.HasExited)
-            {
-                var hwnd = _batProcess.MainWindowHandle;
-                if (hwnd != IntPtr.Zero)
-                    ShowWindow(hwnd, 0);  // 0 = SW_HIDE
-            }
+                HideConsoleOfProcess(_batProcess.Id);
         }
         catch { }
+    }
+
+    /// <summary>
+    /// 隐藏指定进程的控制台窗口。
+    /// 不能依赖 Process.MainWindowHandle：控制台窗口归 conhost 所有，
+    /// cmd 的 MainWindowHandle 实测经常是 0（旧实现因此永远隐藏不掉）。
+    /// 这里 AttachConsole 到目标进程 → GetConsoleWindow 拿到真实句柄 → ShowWindow(SW_HIDE) → 脱离。
+    /// 仅影响窗口显示，进程与输入缓冲区不变（优雅停服的 WriteConsoleInput 仍可用）。
+    /// </summary>
+    internal static bool HideConsoleOfProcess(int pid)
+    {
+        return HideConsoleOfProcess(pid, out _);
+    }
+
+    /// <summary>同上；found=true 表示目标进程确实有控制台窗口（无论原本是否可见）。</summary>
+    internal static bool HideConsoleOfProcess(int pid, out bool found)
+    {
+        found = false;
+        try
+        {
+            if (!AttachConsole((uint)pid)) return false;
+            try
+            {
+                var hwnd = GetConsoleWindow();
+                if (hwnd == IntPtr.Zero) return false;
+                found = true;
+                return ShowWindow(hwnd, 0);
+            }
+            finally { FreeConsole(); }
+        }
+        catch { return false; }
     }
 
     /*
@@ -550,9 +585,7 @@ public class ServerService
                     var exePath = p.MainModule?.FileName;
                     if (exePath != null && string.Equals(exePath, expected, StringComparison.OrdinalIgnoreCase))
                     {
-                        var hwnd = p.MainWindowHandle;
-                        if (hwnd != IntPtr.Zero)
-                            ShowWindow(hwnd, 0);
+                        HideConsoleOfProcess(p.Id);
                         break;
                     }
                 }

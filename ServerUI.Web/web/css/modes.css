@@ -1,0 +1,260 @@
+/* ==========================================================================
+   modes.css — Phase 3b：极简模式（mini）/ 经典模式（classic）窗口模式与视图
+   只使用既有 tokens / 组件；不引入新颜色、圆角、阴影、动画。
+   模式由 .app[data-mode="full|mini|classic"] 驱动（app.js 写入）。
+   ========================================================================== */
+
+/* ================= 模式级骨架 ================= */
+/* mini / classic：隐藏停靠侧栏（内容卡自动占满整宽） */
+.app[data-mode="mini"] .sidebar,
+.app[data-mode="classic"] .sidebar { display: none; }
+
+/* mini：日志面板高度 0、抓手隐藏（不销毁实例，返回 full 立即恢复原高度） */
+.app[data-mode="mini"] .log-wrap,
+.app[data-mode="mini"] .log-resizer { display: none !important; }
+.app[data-mode="mini"] .body { padding-bottom: var(--gap-window); }
+.app[data-mode="mini"] .page { padding: 10px; }
+
+/* mini：620 宽下标题栏收起版本小字；标题、状态胶囊、典/简、主题、窗口按钮全部保留 */
+.app[data-mode="mini"] .titlebar .tb-ver { display: none; }
+.app[data-mode="mini"] .titlebar { padding-left: 10px; gap: 8px; }
+.app[data-mode="mini"] .titlebar .tb-title { font-size: 12.5px; }
+.app[data-mode="mini"] .tb-right { gap: 6px; }
+.app[data-mode="mini"] .status-pill { padding: 0 8px; }
+
+/* 标题栏 典 / 简 选中态：浅底 + 主色文字（无新色值） */
+.tb-mode.active {
+  background: var(--surface-2);
+  color: var(--primary);
+  font-weight: 700;
+}
+.tb-mode.active:hover { background: var(--surface-3); color: var(--primary); }
+
+/* ================= 极简模式视图（620×470） ================= */
+.mini-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;             /* 620×470 下不产生滚动；更小/更大字号时可纵向滚动 */
+  overflow-x: hidden;
+}
+
+.mi-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+.mi-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-small);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.mi-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  color: var(--text-2);
+  flex: 0 0 auto;
+}
+.mi-state .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 6px; }
+.mi-state.ok { color: var(--success); }
+.mi-state.warn { color: var(--warning); }
+.mi-state.bad { color: var(--danger); }
+.mi-state.off { color: var(--muted); }
+.mi-kv { color: var(--muted); flex: 0 0 auto; }
+.mi-kv.ok { color: var(--success); }
+.mi-kv.bad { color: var(--danger); }
+.mi-sep { width: 1px; height: 12px; background: var(--border); flex: 0 0 1px; }
+.mi-back { flex: 0 0 auto; }
+
+.mi-row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; flex: 0 0 auto; }
+.mi-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: 0 0 auto; }
+.mi-row2 .btn, .mi-row3 .btn { width: 100%; min-width: 0; }
+
+/* 主按钮固定 56px：mini 页是 flex 列，必须显式禁止收缩 */
+.mini-page > .btn.tall { flex: 0 0 56px; height: 56px; }
+
+.mini-page .arc-tbl-wrap {
+  flex: 1 1 auto;
+  min-height: 110px;
+  margin-top: 2px;
+}
+
+.mi-hint {
+  flex: 0 0 auto;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 紧凑表格（极简模式）：行高 32 / 表头 28，两列 */
+.arc-tbl.compact { table-layout: fixed; }
+.arc-tbl.compact thead th { height: 28px; padding: 0 8px; font-size: 11px; }
+.arc-tbl.compact tbody td {
+  height: 32px; padding: 0 6px; font-size: 12px;
+  line-height: 32px; white-space: nowrap;
+}
+.arc-tbl.compact tbody tr { height: 32px; }
+.arc-tbl.compact td.arc-name { padding: 0 8px; }
+.arc-tbl.compact td.arc-name .arc-name-in { height: 32px; gap: 6px; }
+.arc-tbl.compact .arc-nm { font-size: 12px; }
+.arc-tbl.compact .pill { height: 16px; padding: 0 6px; font-size: 10px; line-height: 16px; }
+.arc-tbl.compact .arc-empty { padding: 18px 8px; }
+
+.mini-page .arc-tbl tbody tr.active td { background: var(--surface-2); }
+.mini-page.busy { cursor: progress; }
+.mini-page.busy .btn { opacity: .45; pointer-events: none; }
+
+/* ================= 经典模式视图（1280×840 / 最小 1080×700） ================= */
+/* 高度预算（1280×840，日志 190）：页头 32+8、状态卡 72+8、两栏 438。
+   左栏 = 开始游戏 56 + 服务端控制/快速操作 172 + 更新与工具 150 + 两处 gap 20 = 398，
+   右栏 = 存档卡 388 —— 均小于 438，因此 1280 下两栏都不出现内部滚动。 */
+.classic-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;             /* 1280×840：两栏各装得下，页面本身不滚 */
+  overflow-x: hidden;
+}
+
+.cl-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  margin-bottom: 8px;
+}
+.cl-title { font-size: 18px; }
+.cl-back { flex: 0 0 auto; }
+
+.cl-stats { flex: 0 0 auto; margin-bottom: 8px; }
+.cl-stats .stat-card { height: 72px; padding: 9px 14px; gap: 4px; }
+.cl-stats .stat-card .s-value { font-size: 16px; letter-spacing: 0; }
+.cl-stats .stat-card .s-value .s-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cl-stats .stat-card.wide .s-value { font-size: 13.5px; font-weight: 600; }
+
+.cl-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+  gap: var(--gap-card);
+  align-items: stretch;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.cl-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-card);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;            /* 内容装得下就不出滚动条；1080 下由页面统一滚动 */
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+.cl-col > .card { margin-top: 0; }
+.cl-card { padding: 12px 14px; }
+.cl-card .sec-title { margin-bottom: 8px; }
+.cl-card .hint { margin-top: 8px; padding-top: 6px; }
+
+/* 开始游戏：独立 56px 行 */
+.cl-play-row { flex: 0 0 auto; }
+.cl-play { width: 100%; flex: 0 0 56px; height: 56px; }
+
+/* 左栏上半：服务端控制 + 快速操作并排 */
+.cl-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, 1fr);
+  gap: var(--gap-card);
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.cl-split > .card { margin-top: 0; }
+.cl-server .ctrl-stack,
+.cl-quick .ctrl-stack,
+.cl-tools-col { gap: 8px; }
+.cl-server .btn,
+.cl-quick .btn,
+.cl-tools .btn { height: 34px; }
+.cl-server .btn, .cl-quick .btn { width: 100%; min-width: 0; }
+.cl-server .opt-row { min-height: 30px; }
+.cl-server .segmented .seg { height: 28px; padding: 0 12px; }
+.cl-server .switch { font-size: 12px; }
+
+/* 更新与工具：2 列紧凑排布（左：开始更新/完整更新；右：日志/上次更新/AUM/SDK） */
+.cl-tools-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+.cl-tools-col { display: flex; flex-direction: column; min-width: 0; }
+.cl-tools-col .btn { width: 100%; min-width: 0; }
+.cl-tools .cl-update { height: 38px; font-size: 14px; font-weight: 700; }
+.cl-tools .btn.sm { height: 28px; }
+.cl-tools .info-line { min-height: 16px; font-size: 11px; }
+.cl-tools .info-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-tools .btn-row2 { gap: 8px; }
+
+/* 存档管理卡：内部表格吃掉剩余高度，卡片本身按内容自然高度 */
+.cl-archive { display: flex; flex-direction: column; min-height: 0; }
+.cl-archive .sec-title { margin-bottom: 6px; }
+.cl-archive .arc-info {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+.cl-archive .arc-info .arc-kv .v { max-width: none; font-size: 12px; }
+.cl-archive .arc-tbl-wrap { flex: 0 0 auto; height: 200px; min-height: 150px; margin-top: 8px; }
+.cl-archive .arc-drop { height: 50px; margin-top: 8px; }
+.cl-archive .arc-drop .arc-drop-note { display: none; }
+.cl-ops { margin-top: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cl-ops .btn { height: 34px; padding: 0 8px; gap: 4px; font-size: 12px; }
+.cl-ops .btn svg { width: 14px; height: 14px; flex: 0 0 14px; }
+
+.classic-page.busy { cursor: progress; }
+.classic-page.busy .cl-archive .btn { opacity: .45; pointer-events: none; }
+
+/* 窄/矮窗口（1080×700）：两栏仍并排、内容按自然高度，整页纵向滚动，日志仍固定底部 */
+@media (max-width: 1180px), (max-height: 760px) {
+  .classic-page { overflow-y: auto; overflow-x: hidden; }
+  .cl-cols { flex: 0 0 auto; align-items: start; }
+  .cl-col { overflow: visible; padding-right: 0; }
+  .cl-card { padding: 12px 12px; }
+  .cl-cols { gap: 8px; }
+  .cl-stats .stat-card { height: 68px; padding: 8px 12px; }
+  .cl-stats .stat-card .s-value { font-size: 15px; }
+  .cl-stats .stat-card.wide .s-value { font-size: 13px; }
+  .cl-split { gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cl-tools-grid { gap: 8px; }
+  .cl-archive { flex: 0 0 auto; }
+  .cl-archive .arc-info { gap: 6px; }
+  .cl-archive .arc-info .arc-kv { font-size: 11.5px; }
+  .cl-archive .arc-info .arc-kv .v { font-size: 11.5px; }
+  .cl-archive .arc-info .btn.sm { padding: 0 8px; }
+  .cl-ops { gap: 6px; }
+  .cl-ops .btn { padding: 0 6px; font-size: 11.5px; }
+  .cl-ops .btn svg { display: none; }
+}

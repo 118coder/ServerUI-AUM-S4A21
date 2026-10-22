@@ -4,6 +4,9 @@
 
 ---
 
+> **v2.16 界面说明（2026-10-22）**：主界面已迁移到 .NET 10 WPF + WebView2，保留原配色、布局与全部功能；`ServerUI-兼容模式.exe` 与 `开始游戏-ServerUI.exe` 继续提供 Win7/旧入口。新版需要 WebView2 Runtime（Win10/11 通常已自带）。AUM 自更新目前有护栏：旧更新通道会编译 WinForms 源码并回退界面，点击只提示、不执行；新版源码发布后再切换。详见 `ServerUI-WebView2重构说明.md`。
+
+
 ## 项目简介
 
 为 ServerS4A21 服务端模拟器打造的全功能管理套件，专为非技术用户设计，无需了解 .NET SDK、PowerShell 或服务端架构，即可轻松完成：

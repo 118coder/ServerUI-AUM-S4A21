@@ -136,6 +136,9 @@ static class Program
             AntdUI.Localization.DefaultLanguage = "zh-CN";
             AntdUI.Config.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
             AntdUI.Config.TextRenderingHighQuality = true;
+            // v2.17: 关闭控件库的过渡动画 — 悬停/状态切换即时生效,
+            // 不再为每个按钮/开关启动动画计时器 (鼠标划过整页时 CPU 占用明显下降)
+            AntdUI.Config.Animation = false;
             AntdUI.Config.Theme().Dark("#000", "#fff").Light("#fff", "#000").FormBorderColor();
 
             // 启用 XP 风格的控件外观（让按钮、滚动条等看起来现代一点）

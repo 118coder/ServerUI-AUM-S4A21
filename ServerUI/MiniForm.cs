@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ==================================================================
  * 极简模式窗口 (MiniForm.cs) — 独立于主界面源码的全新小窗口
  * ==================================================================
@@ -56,7 +56,7 @@ public partial class MiniForm : AntdUI.Window
         StartPosition = FormStartPosition.CenterScreen;
         ControlBox = false;
         Text = "ServerS4A21 极简模式";
-        Font = new Font("Microsoft YaHei UI", 9.5f);
+        Font = MainForm.F(9.5f);
 
         FormClosing += (s, e) =>
         {
@@ -114,7 +114,7 @@ public partial class MiniForm : AntdUI.Window
         var title = new AntdUI.Label
         {
             Text = "极简模式 · ServerS4A21",
-            Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold),
+            Font = MainForm.F(12f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Cursor = Cursors.Hand
@@ -168,7 +168,7 @@ public partial class MiniForm : AntdUI.Window
         lbStatus = new AntdUI.Label
         {
             Text = "● 未运行",
-            Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold),
+            Font = MainForm.F(9f, FontStyle.Bold),
             ForeColor = Rd,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -176,7 +176,7 @@ public partial class MiniForm : AntdUI.Window
         lbPvf = new AntdUI.Label
         {
             Text = "PVF: ● 检测中",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = MainForm.F(9f),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -184,7 +184,7 @@ public partial class MiniForm : AntdUI.Window
         lbInfo = new AntdUI.Label
         {
             Text = "版本: --",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = MainForm.F(9f),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight
@@ -200,7 +200,7 @@ public partial class MiniForm : AntdUI.Window
             Text = "开始游戏",
             Type = TTypeMini.Success,
             IconSvg = "PlayCircleOutlined",
-            Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold),
+            Font = MainForm.F(13f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             Cursor = Cursors.Hand,
             Margin = new Padding(4)
@@ -340,7 +340,7 @@ public partial class MiniForm : AntdUI.Window
         var lbHint = new AntdUI.Label
         {
             Text = "双击存档 = 切换",
-            Font = new Font("Microsoft YaHei UI", 8.5f),
+            Font = MainForm.F(8.5f),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter
@@ -372,7 +372,7 @@ public partial class MiniForm : AntdUI.Window
         var tip = new AntdUI.Label
         {
             Text = "提示: 服务端运行中无法操作存档; 停服请点【停止服务端】(优雅停服防止回档)",
-            Font = new Font("Microsoft YaHei UI", 8f),
+            Font = MainForm.F(8f),
             ForeColor = Txt2,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter

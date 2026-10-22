@@ -35,12 +35,14 @@ public partial class MainForm : AntdUI.Window
         var d = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1, RowCount = 2,
+            ColumnCount = 1, RowCount = 3,
             BackColor = Color.Transparent,
-            Padding = new Padding(10)
+            Padding = new Padding(12, 8, 12, 10)
         };
+        d.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));    // 页面标题
         d.RowStyles.Add(new RowStyle(SizeType.Absolute, 92F));    // 状态卡片
         d.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));    // 快捷控制 + 快速更新
+        d.Controls.Add(PageHead("开始", "服务端与游戏的一键控制台 · 常用操作都集中在这里"), 0, 0);
         pgDash.Controls.Add(d);
 
         // ============================================================
@@ -65,7 +67,7 @@ public partial class MainForm : AntdUI.Window
         stats.Controls.Add(c2, 1, 0);
         stats.Controls.Add(c3, 2, 0);
         stats.Controls.Add(c4, 3, 0);
-        d.Controls.Add(stats, 0, 0);
+        d.Controls.Add(stats, 0, 1);
 
         // ============================================================
         // ★ 中部两栏 ★ — 快捷控制 (左) + 快速更新 (右)
@@ -80,7 +82,7 @@ public partial class MainForm : AntdUI.Window
         mid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58F));
         mid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
         mid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        d.Controls.Add(mid, 0, 1);
+        d.Controls.Add(mid, 0, 2);
 
         // ============================================================
         // ★ 快捷控制卡片 ★
@@ -90,12 +92,13 @@ public partial class MainForm : AntdUI.Window
         var gg = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3, RowCount = 7,
+            ColumnCount = 3, RowCount = 8,
             BackColor = Color.Transparent
         };
         gg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34F));
         gg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33F));
         gg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33F));
+        gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));   // 小节标题
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));   // 开始游戏
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));   // 停止/重启
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));   // 可选运行方式 + DX 分段选择器
@@ -103,10 +106,13 @@ public partial class MainForm : AntdUI.Window
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));   // PVF/GM/主存档
         gg.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));   // 还原-原版PVF
         gg.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 占位填充行
+        var gcHead = SectionHead("服务端控制");
+        gg.Controls.Add(gcHead, 0, 0);
+        gg.SetColumnSpan(gcHead, 3);
 
         // [开始游戏] — 绿色、加粗、最大最醒目（主操作）
         btPlay = B("开始游戏", TTypeMini.Success, "PlayCircleOutlined");
-        btPlay.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
+        btPlay.Font = F(14f, FontStyle.Bold);
         btPlay.Click += async (s, e) =>
         {
             Lg(">>> 点击了开始游戏", Color.CornflowerBlue);
@@ -148,11 +154,11 @@ public partial class MainForm : AntdUI.Window
             });
         };
 
-        gg.Controls.Add(btPlay, 0, 0);
+        gg.Controls.Add(btPlay, 0, 1);
         gg.SetColumnSpan(btPlay, 3);
-        gg.Controls.Add(btStop, 0, 1);
+        gg.Controls.Add(btStop, 0, 2);
         // [重启服务端] 移到最右列 — 右边缘与上方"开始游戏"按钮右边缘对齐
-        gg.Controls.Add(btRe, 2, 1);
+        gg.Controls.Add(btRe, 2, 2);
 
         // ============================================================
         // ★ 运行方式行 ★ — 可选运行方式(标签) + 分段选择器
@@ -174,7 +180,7 @@ public partial class MainForm : AntdUI.Window
         var sgCap = new AntdUI.Label
         {
             Text = "可选运行方式",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = F(9f),
             ForeColor = Color.FromArgb(140, 140, 148),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -200,7 +206,7 @@ public partial class MainForm : AntdUI.Window
             return true;
         };
         sgRow.Controls.Add(sgDx, 1, 0);
-        gg.Controls.Add(sgRow, 0, 2);
+        gg.Controls.Add(sgRow, 0, 3);
         gg.SetColumnSpan(sgRow, 3);
 
         // ============================================================
@@ -210,12 +216,12 @@ public partial class MainForm : AntdUI.Window
         cbDw.CheckedChanged += (s, e) => ApplyDx();
         var wmRow = SwRow("去除dgVoodooCpl水印", cbDw);
         wmRow.Margin = new Padding(4, 2, 4, 4);
-        gg.Controls.Add(wmRow, 0, 3);
+        gg.Controls.Add(wmRow, 0, 4);
         gg.SetColumnSpan(wmRow, 3);
 
         // ---- 打开目录 / GM 工具 ----
-        // [打开PVF目录] — 与"停止服务端"同风格 (红色 Error)
-        btPv = B("打开PVF目录", TTypeMini.Error, "FolderOpenOutlined");
+        // [打开PVF目录] — 常规操作用中性色; 红色只留给"停止/删除"这类破坏性动作
+        btPv = B("打开PVF目录", TTypeMini.Default, "FolderOpenOutlined");
         btPv.Click += (s, e) =>
         {
             Lg(">>> 打开PVF目录", Color.CornflowerBlue);
@@ -227,8 +233,8 @@ public partial class MainForm : AntdUI.Window
                 Lg("PVF目录不存在", Color.Gold);
         };
 
-        // [GM工具] — 与"安装NET.10 SDK"同风格 (橙色 Warn), 启动 DfoGmTool 网页管理后台
-        btGm = B("GM工具", TTypeMini.Warn, "ToolOutlined");
+        // [GM工具] — 启动 DfoGmTool 网页管理后台 (常规工具入口, 中性色)
+        btGm = B("GM工具", TTypeMini.Default, "ToolOutlined");
         btGm.Click += (s, e) => LaunchGmTool();
 
         btMD = B("打开主存档", TTypeMini.Default, "DatabaseOutlined");
@@ -244,15 +250,28 @@ public partial class MainForm : AntdUI.Window
             else Lg("主存档目录不存在", Color.Gold);
         };
 
-        gg.Controls.Add(btPv, 0, 4);
-        gg.Controls.Add(btGm, 1, 4);
-        gg.Controls.Add(btMD, 2, 4);
+        gg.Controls.Add(btPv, 0, 5);
+        gg.Controls.Add(btGm, 1, 5);
+        gg.Controls.Add(btMD, 2, 5);
 
         // [还原-原版PVF] — 把 实用工具包\PVF原版\Script.pvf 覆盖回游戏根目录
         btPvR = B("还原-原版PVF", TTypeMini.Default, "RollbackOutlined");
         btPvR.Click += (s, e) => RestoreOriginalPvf();
-        gg.Controls.Add(btPvR, 0, 5);
+        gg.Controls.Add(btPvR, 0, 6);
         gg.SetColumnSpan(btPvR, 3);
+
+        // 卡片底部提示 — 填充底部留白, 同时把两个最容易踩的坑提前说清楚
+        var gcHint = new AntdUI.Label
+        {
+            Text = "提示：首次使用请先完成一次更新；服务端运行中会阻止存档切换等操作。",
+            Font = F(8.5f),
+            ForeColor = Faint,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft,
+            Margin = new Padding(4, 0, 4, 2)
+        };
+        gg.Controls.Add(gcHint, 0, 7);
+        gg.SetColumnSpan(gcHint, 3);
         gc.Controls.Add(gg);
         mid.Controls.Add(gc, 0, 0);
 
@@ -264,20 +283,24 @@ public partial class MainForm : AntdUI.Window
         var ug = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2, RowCount = 5,
+            ColumnCount = 2, RowCount = 6,
             BackColor = Color.Transparent
         };
         ug.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         ug.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        ug.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));   // 小节标题
         ug.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));   // 增量/全量
         ug.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));   // 查看更新日志
         ug.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));   // 上次更新
         ug.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));   // 更新AUM / 安装SDK
         ug.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 占位填充行
+        var guHead = SectionHead("更新与工具");
+        ug.Controls.Add(guHead, 0, 0);
+        ug.SetColumnSpan(guHead, 2);
 
         // [增量更新] — 蓝色（推荐，常规操作）— v2.1 起隐藏按钮, 由"开始更新"统一入口
         btIn = B("增量更新", TTypeMini.Primary, "CloudDownloadOutlined");
-        btIn.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold);
+        btIn.Font = F(12f, FontStyle.Bold);
         btIn.Visible = false;
         btIn.Click += async (s, e) =>
         {
@@ -287,7 +310,7 @@ public partial class MainForm : AntdUI.Window
 
         // [全量更新] — 橙色（耗时较长，需注意）— v2.1 起隐藏按钮, 逻辑保留(RF 可随时恢复)
         btFu = B("全量更新", TTypeMini.Warn, "CloudSyncOutlined");
-        btFu.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold);
+        btFu.Font = F(12f, FontStyle.Bold);
         btFu.Visible = false;
         btFu.Click += async (s, e) =>
         {
@@ -297,13 +320,12 @@ public partial class MainForm : AntdUI.Window
 
         // [开始更新] — 长条主按钮, 日常更新入口(执行增量更新)
         var btStartUpd = B("开始更新", TTypeMini.Primary, "ThunderboltOutlined");
-        btStartUpd.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
+        btStartUpd.Font = F(13f, FontStyle.Bold);
         btStartUpd.Click += async (s, e) =>
         {
             Lg(">>> 点击了开始更新", Color.CornflowerBlue);
             await RI();
         };
-        ug.Controls.Add(btStartUpd, 1, 0);
 
         // [查看更新日志] — 中性色
         btVL = B("查看更新日志", TTypeMini.Default, "FileTextOutlined");
@@ -318,30 +340,42 @@ public partial class MainForm : AntdUI.Window
         lbLu.TextAlign = ContentAlignment.MiddleLeft;
         lbLu.TextMultiLine = true;
 
-        // [更新AUM] — 红色（与打开PVF目录一致）
-        btAu = B("更新AUM", TTypeMini.Error, "SyncOutlined");
+        // [更新AUM] — 常规维护动作, 中性色 (红色只留给破坏性操作)
+        btAu = B("更新AUM", TTypeMini.Default, "SyncOutlined");
         btAu.Click += async (s, e) =>
         {
             Lg(">>> 正在检测 AUM 管理器更新...", Color.CornflowerBlue);
             await CheckAndUpdateAUM();
         };
 
-        // [安装SDK] — 橙色（需要用户注意的操作）
-        btSdk = B("安装NET.10 SDK", TTypeMini.Warn, "DownloadOutlined");
+        // [安装SDK] — 一次性环境准备, 中性色
+        btSdk = B("安装NET.10 SDK", TTypeMini.Default, "DownloadOutlined");
         btSdk.Click += async (s, e) =>
         {
             Lg(">>> 开始安装 .NET 10 SDK...", Color.CornflowerBlue);
             await IS();
         };
 
-        ug.Controls.Add(btStartUpd, 0, 0);
+        ug.Controls.Add(btStartUpd, 0, 1);
         ug.SetColumnSpan(btStartUpd, 2);   // 长条按钮横跨整行
-        ug.Controls.Add(btVL, 0, 1);
+        ug.Controls.Add(btVL, 0, 2);
         ug.SetColumnSpan(btVL, 2);
-        ug.Controls.Add(lbLu, 0, 2);
+        ug.Controls.Add(lbLu, 0, 3);
         ug.SetColumnSpan(lbLu, 2);
-        ug.Controls.Add(btAu, 0, 3);
-        ug.Controls.Add(btSdk, 1, 3);
+        ug.Controls.Add(btAu, 0, 4);
+        ug.Controls.Add(btSdk, 1, 4);
+
+        var guHint = new AntdUI.Label
+        {
+            Text = "提示：更新耗时较长，期间请勿重复点击；更新失败可勾选下方「镜像下载」后重试。",
+            Font = F(8.5f),
+            ForeColor = Faint,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft,
+            Margin = new Padding(4, 0, 4, 2)
+        };
+        ug.Controls.Add(guHint, 0, 5);
+        ug.SetColumnSpan(guHint, 2);
         gu.Controls.Add(ug);
         mid.Controls.Add(gu, 1, 0);
     }
@@ -417,18 +451,20 @@ public partial class MainForm : AntdUI.Window
     // ================================================================
     void BuildArchive()
     {
-        pgArc.Padding = new Padding(10);
+        pgArc.Padding = new Padding(12, 8, 12, 10);
         var ag = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1, RowCount = 5,
+            ColumnCount = 1, RowCount = 6,
             BackColor = Color.Transparent
         };
-        ag.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));   // 信息栏
+        ag.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));   // 页面标题
+        ag.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));   // 信息栏
         ag.RowStyles.Add(new RowStyle(SizeType.Absolute, 60F));   // 常用操作
         ag.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));   // 目录访问
         ag.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 存档表格
         ag.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));   // 拖拽区
+        ag.Controls.Add(PageHead("存档管理", "切换、备份与导入导出存档 · 双击列表换挡，拖动 .db 到窗口也能换"), 0, 0);
         pgArc.Controls.Add(ag);
 
         // ============================================================
@@ -473,7 +509,7 @@ public partial class MainForm : AntdUI.Window
         ib.Controls.Add(lbBk, 1, 0);
         ib.Controls.Add(SwRow("清理冗余DB", cbCl), 3, 0);
         ib.Controls.Add(btRf, 4, 0);
-        ag.Controls.Add(ib, 0, 0);
+        ag.Controls.Add(ib, 0, 1);
 
         // ============================================================
         // ★ 常用操作 ★ — 储存当前 / 导入 / 导出 / 撤销
@@ -531,7 +567,7 @@ public partial class MainForm : AntdUI.Window
         row1.Controls.Add(btIm, 1, 0);
         row1.Controls.Add(btEx, 2, 0);
         row1.Controls.Add(btUd, 3, 0);
-        ag.Controls.Add(row1, 0, 1);
+        ag.Controls.Add(row1, 0, 2);
 
         // ============================================================
         // ★ 目录访问 ★ — 打开切换库 / 备份库 / 主存档
@@ -584,7 +620,7 @@ public partial class MainForm : AntdUI.Window
             else Lg("主存档目录不存在", Color.Gold);
         };
         row2.Controls.Add(btMD2, 2, 0);
-        ag.Controls.Add(row2, 0, 2);
+        ag.Controls.Add(row2, 0, 3);
 
         // ============================================================
         // ★ 存档表格 ★ — 序号 / 存档名称 / 大小 / 修改时间
@@ -593,7 +629,7 @@ public partial class MainForm : AntdUI.Window
         lv = new AntdUI.Table
         {
             Dock = DockStyle.Fill,
-            Margin = new Padding(4, 2, 4, 4),
+            Margin = new Padding(0),
             FixedHeader = true,
             AutoSizeColumnsMode = AntdUI.ColumnsMode.Fill,
             EmptyHeader = false
@@ -610,7 +646,13 @@ public partial class MainForm : AntdUI.Window
         //    因此切换存档必须挂在 CellDoubleClick 上
         lv.CellDoubleClick += Lv_CellDoubleClick;
         lv.CellClickBegin += Lv_CellClickBegin;
-        ag.Controls.Add(lv, 0, 3);
+        // 表格放进卡片, 与 DLL 扩展页的"列表卡片"视觉语言统一
+        // (旧实现表格直接铺在页面底色上, 与其它页面明显不是一套)
+        var listCard = Card(8, 2);
+        listCard.Margin = new Padding(4, 2, 4, 4);
+        listCard.Padding = new Padding(2);
+        listCard.Controls.Add(lv);
+        ag.Controls.Add(listCard, 0, 4);
 
         // ============================================================
         // ★ 拖拽区 ★ — 拖 .db 文件到此处快速换挡; 双击=储存当前
@@ -653,13 +695,13 @@ public partial class MainForm : AntdUI.Window
         lbDr = new AntdUI.Label
         {
             Text = "📁 拖拽 .db 文件到此处 = 快速替换存档 (双击 = 储存当前)",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = F(9f),
             ForeColor = Color.FromArgb(130, 130, 130),
             TextAlign = ContentAlignment.MiddleCenter,
             Dock = DockStyle.Fill
         };
         dz.Controls.Add(lbDr);
-        ag.Controls.Add(dz, 0, 4);
+        ag.Controls.Add(dz, 0, 5);
     }
 
 
@@ -724,14 +766,18 @@ public partial class MainForm : AntdUI.Window
         var u = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 1, RowCount = 4,
+            ColumnCount = 1, RowCount = 5,
             BackColor = Color.Transparent,
-            Padding = new Padding(10)
+            Padding = new Padding(12, 8, 12, 10)
         };
-        u.RowStyles.Add(new RowStyle(SizeType.Absolute, 102F));   // 关于
-        u.RowStyles.Add(new RowStyle(SizeType.Absolute, 154F));   // 仓库链接 (4 行)
-        u.RowStyles.Add(new RowStyle(SizeType.Absolute, 182F));   // 实用工具 (3 个按钮: 编译/赛利亚/安全DLL)
+        u.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));    // 页面标题
+        // 卡片高度按"内边距 + 固定行高"重新核算: 旧值装不下 4 行链接/2 行简介,
+        // 第 4 个链接与简介会被裁掉 (无头布局体检发现)
+        u.RowStyles.Add(new RowStyle(SizeType.Absolute, 128F));   // 关于 (标题+版本+两行简介)
+        u.RowStyles.Add(new RowStyle(SizeType.Absolute, 188F));   // 仓库链接 (4 行)
+        u.RowStyles.Add(new RowStyle(SizeType.Absolute, 186F));   // 实用工具 (3 个按钮: 编译/赛利亚/安全DLL)
         u.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));    // 占位填充行
+        u.Controls.Add(PageHead("设置与关于", "版本信息 · 仓库链接 · 实用工具"), 0, 0);
         pgUpd.Controls.Add(u);
 
         // ============================================================
@@ -754,14 +800,14 @@ public partial class MainForm : AntdUI.Window
         var appName = new AntdUI.Label
         {
             Text = "ServerS4A21 管理器",
-            Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold),
+            Font = F(14f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
         var verLb = new AntdUI.Label
         {
             Text = "v" + VER + " · ServerS4A21-AUM",
-            Font = new Font("Microsoft YaHei UI", 9.5f),
+            Font = F(9.5f),
             ForeColor = Color.FromArgb(130, 130, 130),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
@@ -769,7 +815,7 @@ public partial class MainForm : AntdUI.Window
         var aboutText = new AntdUI.Label
         {
             Text = "基于 Ant Design 设计语言构建的单机服务端管理工具：一键启停游戏服务、存档管理、增量更新、GM 工具等。",
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = F(9f),
             ForeColor = Color.FromArgb(140, 140, 148),
             TextAlign = ContentAlignment.TopLeft,
             TextMultiLine = true,
@@ -782,7 +828,7 @@ public partial class MainForm : AntdUI.Window
         g1.Controls.Add(aboutText, 0, 2);
         g1.SetColumnSpan(aboutText, 2);
         c1.Controls.Add(g1);
-        u.Controls.Add(c1, 0, 0);
+        u.Controls.Add(c1, 0, 1);
 
         // ============================================================
         // ★ 仓库与链接 ★ — 点击在系统默认浏览器中打开
@@ -803,7 +849,7 @@ public partial class MainForm : AntdUI.Window
         g2.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
         g2.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-        var cap2 = Cap("仓库与链接");
+        var cap2 = SectionHead("仓库与链接");
         g2.Controls.Add(cap2, 0, 0);
         g2.SetColumnSpan(cap2, 2);
 
@@ -835,7 +881,7 @@ public partial class MainForm : AntdUI.Window
         g2.Controls.Add(link3, 0, 4);
         g2.SetColumnSpan(link3, 2);
         c2.Controls.Add(g2);
-        u.Controls.Add(c2, 0, 1);
+        u.Controls.Add(c2, 0, 2);
 
         // ============================================================
         // ★ 实用工具 ★
@@ -857,8 +903,9 @@ public partial class MainForm : AntdUI.Window
         g3.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));   // 安装新安全DLL
         g3.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 占位填充行
 
-        g3.Controls.Add(Cap("实用工具"), 0, 0);
-        g3.SetColumnSpan(Cap("实用工具"), 3);
+        var cap3 = SectionHead("实用工具");
+        g3.Controls.Add(cap3, 0, 0);
+        g3.SetColumnSpan(cap3, 3);
 
         // [进行本地编译] — 调用 AUM管理组件\进行本地编译.bat
         var btBuild = B("进行本地编译", TTypeMini.Primary, "BuildOutlined");
@@ -886,7 +933,7 @@ public partial class MainForm : AntdUI.Window
 
         // [待定] — 原"修复赛丽亚房间问题"按钮 (红色 Error)
         // S4A21 版本服务端与游戏本体已无此问题，功能暂时移除；保留按钮以备未来需要
-        var btFix = B("待定", TTypeMini.Error, "BuildOutlined");
+        var btFix = B("待定", TTypeMini.Default, "BuildOutlined");
         btFix.Click += (s, e) =>
             Lg("【待定】原\"修复赛丽亚房间问题\"功能已暂时移除（S4A21 已无此问题），按钮保留", Txt2);
         var fixTip = L("功能已暂时移除（S4A21 版本已无此问题），按钮保留待定", 8.5f);
@@ -905,7 +952,7 @@ public partial class MainForm : AntdUI.Window
         g3.Controls.Add(btSec, 0, 3);
         g3.Controls.Add(secTip, 1, 3);
         c3.Controls.Add(g3);
-        u.Controls.Add(c3, 0, 2);
+        u.Controls.Add(c3, 0, 3);
     }
 
     /*
@@ -1102,7 +1149,7 @@ public partial class MainForm : AntdUI.Window
         var nameLb = new AntdUI.Label
         {
             Text = name,
-            Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold),
+            Font = F(9.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(140, 140, 148),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -1111,7 +1158,7 @@ public partial class MainForm : AntdUI.Window
         var urlLb = new AntdUI.Label
         {
             Text = urlText,
-            Font = new Font("Microsoft YaHei UI", 9f),
+            Font = F(9f),
             ForeColor = Ac,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -1207,7 +1254,7 @@ public partial class MainForm : AntdUI.Window
 
             ("日志区",
              "日志工具", "ConsoleSqlOutlined", "运行日志",
-             "窗口底部常驻的运行日志条。\n\n功能：\n· 复制日志 — 把日志全文复制到剪贴板\n· 清空日志 — 清空当前显示与缓存\n· 折叠按钮（右下角）— 收起/展开日志区\n· 跳过更新日志 — 更新时不拉取提交记录（橙色）\n· 镜像下载 — 跳过 GitGud 直接使用镜像源（橙色）\n\n提示：更新期间底部会实时显示进度条与百分比"),
+             "窗口底部常驻的运行日志条。\n\n功能：\n· 复制日志 — 把日志全文复制到剪贴板\n· 清空日志 — 清空当前显示与缓存\n· 折叠按钮（右侧）— 收起/展开日志区\n· 拖动日志区上方的分隔线 — 上下调整日志区高度（双击同一位置也可折叠/展开）\n· 跳过更新日志 — 更新时不拉取提交记录，可明显加快更新\n· 镜像下载 — 跳过 GitGud 直接使用 Gitee/GitHub/Codeberg 镜像\n\n提示：\n· 更新期间底部会实时显示进度条与百分比\n· 日志区默认高度已缩减，把空间留给页面内容；需要看历史日志时再拖高"),
         };
 
         var root = new TableLayoutPanel
@@ -1215,12 +1262,25 @@ public partial class MainForm : AntdUI.Window
             Dock = DockStyle.Fill,
             ColumnCount = 2, RowCount = 1,
             BackColor = Color.Transparent,
-            Padding = new Padding(10)
+            Padding = new Padding(0)
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 312F));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        pgHelp.Controls.Add(root);
+
+        var outer = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1, RowCount = 2,
+            BackColor = Color.Transparent,
+            Padding = new Padding(12, 8, 12, 10)
+        };
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));
+        outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        outer.Controls.Add(PageHead("使用说明", "左侧选功能，右侧看详细说明 · 首次使用建议先看「快速开始」"), 0, 0);
+        outer.Controls.Add(root, 0, 1);
+        pgHelp.Controls.Add(outer);
 
         // ============================================================
         // ★ 左侧: 功能按钮列表 (分组标题 + 单列全宽按钮, 可滚动)
@@ -1264,7 +1324,7 @@ public partial class MainForm : AntdUI.Window
                 var gCap = new AntdUI.Label
                 {
                     Text = "—— " + h.group + " ——",
-                    Font = new Font("Microsoft YaHei UI", 8.5f),
+                    Font = F(8.5f),
                     ForeColor = Color.FromArgb(120, 120, 128),
                     AutoSize = false,
                     Size = new Size(btnW, 24),
@@ -1309,7 +1369,7 @@ public partial class MainForm : AntdUI.Window
         lbHelpTitle = new AntdUI.Label
         {
             Text = "点击左侧按钮查看使用说明",
-            Font = new Font("Microsoft YaHei UI", 16f, FontStyle.Bold),
+            Font = F(16f, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -1320,7 +1380,7 @@ public partial class MainForm : AntdUI.Window
         lbHelpBody = new AntdUI.Label
         {
             Text = "左侧列出了本程序所有功能按钮，点击任意一个即可查看对应的详细使用说明。\n\n包括：服务端控制、运行方式、目录与工具、更新管理、存档管理、扩展功能（DLL扩展 / 调整系统时间 / 还原原版PVF）、日志区 共 7 大类功能。",
-            Font = new Font("Microsoft YaHei UI", 10f),
+            Font = F(10f),
             ForeColor = Color.FromArgb(150, 150, 158),
             TextAlign = ContentAlignment.TopLeft,
             TextMultiLine = true,
@@ -1357,11 +1417,12 @@ public partial class MainForm : AntdUI.Window
         {
             Dock = DockStyle.Fill,
             Radius = 8,
-            Shadow = 2,
+            Shadow = 0,   // 与 Card() 一致: 阴影绘制开销大, 用描边代替
             BorderWidth = 1F,
             Margin = new Padding(12, 8, 12, 12)
         };
-        lp.Padding = new Padding(0, 0, 0, 0);
+        // 内缩 8px: 深色日志区不再贴死圆角卡片边缘, 看起来像嵌在卡片里的"终端窗"
+        lp.Padding = new Padding(8, 0, 8, 8);
 
         // ============================================================
         // ★ 日志工具条 ★
@@ -1383,15 +1444,14 @@ public partial class MainForm : AntdUI.Window
         lbar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40F));   // 折叠按钮
         lbar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-        var lbLogTitle = Cap("运行日志");
-        lbLogTitle.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+        var lbLogTitle = SectionHead("运行日志");
 
         // 进度百分比标签 (更新时显示)
         lbPg = new AntdUI.Label
         {
             Text = "",
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 8.5f),
+            Font = F(8.5f),
             ForeColor = Color.FromArgb(130, 130, 130),
             TextAlign = ContentAlignment.MiddleLeft,
             Visible = false
@@ -1438,9 +1498,10 @@ public partial class MainForm : AntdUI.Window
         {
             _logCollapsed = !_logCollapsed;
             rt.Visible = !_logCollapsed;
-            _root.RowStyles[2].Height = _logCollapsed ? 46 : 210;
+            _root.RowStyles[3].Height = _logCollapsed ? LogCollapsedH : _logExpandedH;
             btFold.IconSvg = _logCollapsed ? "UpOutlined" : "DownOutlined";
         };
+        Tip(btFold, "折叠 / 展开运行日志（也可直接拖动上方的分隔线）");
 
         // 跳过更新日志开关 — 下次更新不拉取仓库提交记录
         cbSkipLog = new AntdUI.Switch { Checked = false, Cursor = Cursors.Hand };
@@ -1459,8 +1520,12 @@ public partial class MainForm : AntdUI.Window
         };
 
         lbar.Controls.Add(lbLogTitle, 0, 0);
-        lbar.Controls.Add(SwRow("跳过更新日志", cbSkipLog, 8.5f, Or), 1, 0);
-        lbar.Controls.Add(SwRow("镜像下载", cbMirror, 8.5f, Or), 2, 0);
+        var skipRow = SwRow("跳过更新日志", cbSkipLog, 8.5f, Mute);
+        var mirrorRow = SwRow("镜像下载", cbMirror, 8.5f, Mute);
+        Tip(skipRow, "更新时不拉取仓库提交记录，可明显加快更新速度");
+        Tip(mirrorRow, "跳过 GitGud 主源，直接用 Gitee/GitHub/Codeberg 镜像下载");
+        lbar.Controls.Add(skipRow, 1, 0);
+        lbar.Controls.Add(mirrorRow, 2, 0);
         lbar.Controls.Add(lbPg, 3, 0);
         lbar.Controls.Add(btCp, 4, 0);
         lbar.Controls.Add(btCl, 5, 0);
@@ -1479,6 +1544,8 @@ public partial class MainForm : AntdUI.Window
             Font = new Font("Consolas", 9.5f),
             BorderStyle = BorderStyle.None
         };
+        // 原生滚动条按系统浅色绘制, 在深色日志区里很扎眼 — 句柄就绪后切换为暗色主题滚动条
+        rt.HandleCreated += (s, e) => ApplyLogTheme();
 
         // 更新进度条 — 更新时显示，平时自动隐藏
         pb = new AntdUI.Progress
@@ -1495,6 +1562,6 @@ public partial class MainForm : AntdUI.Window
         lp.Controls.Add(rt);
         lp.Controls.Add(lbar);
         lp.Controls.Add(pb);
-        _root.Controls.Add(lp, 0, 2);
+        _root.Controls.Add(lp, 0, 3);
     }
 }

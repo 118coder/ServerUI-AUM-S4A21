@@ -1,0 +1,386 @@
+/* ==========================================================================
+   shell.css — 外壳骨架：标题栏 / 侧边导航 / 内容卡片 / 日志面板分隔抓手
+   ========================================================================== */
+
+.app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  /* 不再自绘边框：窗口 1px 主题边框由宿主 RootBorder / DWM 提供，避免双层边框 */
+  overflow: hidden;
+}
+
+/* ---------- 标题栏（48px，HTML 自绘） ---------- */
+.titlebar {
+  height: var(--h-titlebar);
+  flex: 0 0 var(--h-titlebar);
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  -webkit-app-region: no-drag;
+}
+.titlebar .brand-icon {
+  width: 18px; height: 18px;
+  flex: 0 0 18px;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+.titlebar .brand {
+  width: 18px; height: 18px;
+  color: var(--primary);
+  flex: 0 0 18px;
+}
+.titlebar .tb-title {
+  font-size: var(--fs-btn);
+  font-weight: 600;
+  letter-spacing: .2px;
+  white-space: nowrap;
+}
+.titlebar .tb-ver { color: var(--faint); font-size: var(--fs-small); font-weight: 400; white-space: nowrap; }
+.titlebar .tb-drag {
+  flex: 1 1 auto;
+  align-self: stretch;
+  cursor: default;
+}
+
+/* 标题栏右侧：状态药丸 + 典 / 简 */
+.tb-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+/* 状态药丸：浅底 + 同色描边 + 同色文字（对齐 dash.png） */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: rgba(140, 140, 148, .14);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+.status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 6px; }
+.status-pill.ok { color: var(--success); border-color: var(--success); background: rgba(73, 170, 25, .14); }
+.status-pill.warn { color: var(--warning); border-color: var(--warning); background: rgba(216, 150, 20, .14); }
+.status-pill.bad { color: var(--danger); border-color: var(--danger); background: rgba(220, 68, 70, .14); }
+.status-pill.off { color: var(--text-2); border-color: var(--border-strong); background: rgba(140, 140, 148, .14); }
+
+/* 典 / 简：经典 / 简洁界面入口（Phase 3 提供实际布局）
+   对齐旧 UI：44px 宽 Ghost 按钮 —— 无边框、透明底，仅 hover 时出现背景。 */
+.tb-mode {
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-btn);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  transition: color var(--t-hover) ease, background-color var(--t-hover) ease;
+}
+.tb-mode:hover { background: var(--surface-2); color: var(--text); }
+.tb-mode:active { background: var(--surface-3); }
+
+.tb-btns { display: flex; align-self: stretch; }
+.tb-btn {
+  width: 46px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  transition: background-color var(--t-fast) linear, color var(--t-fast) linear;
+}
+.tb-btn svg { width: 12px; height: 12px; }
+.tb-btn:hover { background: var(--surface-3); color: var(--text); }
+.tb-btn.close:hover { background: var(--danger); color: #FFFFFF; }
+
+/* ---------- 主体：侧栏 + 内容 ---------- */
+.body {
+  flex: 1 1 auto;
+  display: flex;
+  gap: var(--gap-card);
+  padding: var(--gap-window) var(--gap-window) 0;
+  min-height: 0;
+}
+
+.sidebar {
+  width: var(--w-sidebar);
+  flex: 0 0 var(--w-sidebar);
+  /* 老版侧栏是页面底色（不是卡片色）：卡片/日志才用 --surface，层次才正确 */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.nav-item {
+  height: 56px;
+  flex: 0 0 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: var(--r-card);
+  color: var(--text);
+  font-size: var(--fs-body);
+  transition: background-color var(--t-hover) ease, color var(--t-hover) ease;
+}
+.nav-item svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.nav-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-item:hover { background: var(--surface-2); }
+.nav-item.active { background: var(--primary); color: #FFFFFF; font-weight: 600; }
+.nav-item.disabled { opacity: .45; cursor: not-allowed; }
+.nav-item.disabled:hover { background: transparent; }
+
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  /* 同上：内容区透出页面底色，卡片浮在其上（老版 AntdUI 的 BgContainer 层次） */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+.page {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 12px 10px;
+  /* 纵向 flex：让内容区卡片能撑满高度（dash-cols flex:1） */
+  display: flex;
+  flex-direction: column;
+}
+.page > .page-head { flex: 0 0 auto; }
+.page > .stat-row { flex: 0 0 auto; }
+
+.page-head { margin-bottom: 10px; }
+.page-title { font-size: var(--fs-page-title); font-weight: 700; letter-spacing: .2px; }
+.page-sub { font-size: var(--fs-subtitle); color: var(--muted); margin-top: 2px; }
+
+/* ---------- 日志面板分隔（§6.4：窄空隙 + 居中抓手，禁止整宽黑粗条/白线）
+   命中区域 10px（≥10px），仅中间 40×3 抓手可见，左右留空。 */
+.log-resizer {
+  flex: 0 0 var(--h-resizer);
+  height: var(--h-resizer);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  background: transparent;
+  z-index: 2;
+}
+.log-resizer .grip {
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  opacity: .6;
+  transition: opacity var(--t-hover) ease, background-color var(--t-hover) ease;
+}
+.log-resizer:hover .grip { opacity: 1; background: var(--primary); }
+.log-resizer.dragging .grip { opacity: 1; background: var(--primary); }
+
+/* ---------- 日志面板 ---------- */
+.log-wrap {
+  flex: 0 0 var(--h-log);
+  height: var(--h-log);
+  padding: 0 var(--gap-window) var(--gap-window);
+  min-height: 0;
+}
+.log-wrap.collapsed { flex-basis: var(--h-log-collapsed); height: var(--h-log-collapsed); }
+
+.log-panel {
+  height: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.log-toolbar {
+  height: 44px;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.log-toolbar .lt-bar {
+  width: 4px; height: 14px;
+  border-radius: 2px;
+  background: var(--primary);
+  flex: 0 0 4px;
+}
+.log-toolbar .lt-sep {
+  width: 1px; height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex: 0 0 1px;
+}
+.log-toolbar .lt-title { font-size: var(--fs-section); font-weight: 700; }
+.log-toolbar .lt-switches { display: flex; align-items: center; gap: 14px; }
+.log-toolbar .lt-switches .switch { font-size: var(--fs-small); color: var(--muted); }
+.log-toolbar .lt-switches .switch.on { color: var(--text-2); }
+.log-toolbar .lt-spacer { flex: 1 1 auto; }
+
+.log-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--log-bg);
+  /* 浅色主题下日志底是浅灰，靠 1px 描边与白色卡片区分（深色下 transparent） */
+  border: 1px solid var(--log-border);
+  margin: 8px 10px 10px;
+  border-radius: var(--r-input);
+  padding: 10px 12px;
+}
+.log-wrap.collapsed .log-body { display: none; }
+
+.log-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--log-default);
+}
+.log-line.lv-success { color: var(--log-success); }
+.log-line.lv-warning { color: var(--log-warning); }
+.log-line.lv-error { color: var(--log-error); }
+.log-line.lv-info { color: var(--log-info); }
+.log-line.lv-secondary { color: var(--log-secondary); }
+
+.log-empty { color: var(--faint); font-family: var(--font-mono); font-size: 12px; }
+
+/* 内嵌进度条（3px，贴日志面板顶部下沿） */
+.progress-strip {
+  flex: 0 0 3px;
+  height: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress-strip .bar {
+  height: 100%;
+  width: 0;
+  background: var(--primary);
+  transition: width 200ms linear;
+}
+.progress-strip.hidden { display: none; }
+.progress-label {
+  font-size: var(--fs-small);
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+/* 按钮忙碌内联菊环 */
+.spinner {
+  width: 12px; height: 12px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+  flex: 0 0 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 启动遮罩 */
+.splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 50;
+  opacity: 1;
+  transition: opacity 180ms ease-in;
+}
+.splash.out { opacity: 0; pointer-events: none; }
+
+/* 启动动画：只用 transform / opacity（合成层），不触发布局。
+   与 WPF 宿主启动页同构：环上扫光 + 标记 + 标题 + 进度条。 */
+.sp-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 50%;
+}
+.sp-ring {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.sp-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  opacity: .75;
+}
+.sp-arc {
+  position: absolute;
+  inset: 0;
+  width: 78px;
+  height: 78px;
+  color: var(--primary);
+  transform-origin: 50% 50%;
+  animation: sp-spin 1200ms linear infinite;
+  will-change: transform;
+}
+@keyframes sp-spin { to { transform: rotate(360deg); } }
+.sp-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 21px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sp-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.sp-sub { font-size: 12px; color: var(--muted); margin-top: 7px; }
+.sp-track {
+  width: 176px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  margin-top: 24px;
+  overflow: hidden;
+}
+.sp-bar {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  /* 只动 transform：进度增长不触发重排/重绘 */
+  transition: transform 220ms ease-out;
+  will-change: transform;
+}
