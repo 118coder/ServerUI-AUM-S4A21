@@ -1,6 +1,6 @@
-# 新旧功能对照表（v2.20 迁移完整性核查）
+# 新旧功能对照表（v2.21.1 迁移完整性核查）
 
-> 对照基准：`ServerUI\`（WinForms + AntdUI，v2.16 兼容模式）→ `ServerUI.Web\`（.NET 10 WPF + WebView2，v2.20）
+> 对照基准：`ServerUI\`（WinForms + AntdUI，v2.16 兼容模式）→ `ServerUI.Web\`（.NET 10 WPF + WebView2，v2.21.1）
 > 核查日期：2026-10-23 · 核查方式：逐个枚举旧版可点击控件与日志动作，逐项在新版定位实现
 
 ---
@@ -149,6 +149,6 @@
 
 - `node ServerUI.Web\tools\ui-shots.js --out ..\_ui-report --sizes=1280x840,1080x700` → `layout.txt` 0 个 `!!`
 - `node ServerUI.Web\tools\app-shots.js --exe=..\ServerUI-有依赖版.exe --out ..\_ui-report\real` → 38 项 0 失败
-- `ServerUI-有依赖版.exe --selftest` → exit 0，`version: 2.20`，`consoleHide.ok: true`
+- `ServerUI-有依赖版.exe --selftest` → exit 0，`version: 2.21.1`，`consoleHide.ok: true`
 - `--playtest`（沙箱）→ 第二次点击返回 `reused:true`，客户端拉起 2 次
 - 对照断言：`play-while-running`、`sdk-install-while-ready`、`palette-dark/light`、`dll-drag`、`dll-drag-native`

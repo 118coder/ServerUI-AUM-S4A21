@@ -25,10 +25,9 @@ namespace ServerUI.Web;
 /// </summary>
 internal static class UpdaterTests
 {
-    // 夹具 exe 是真实构建产物（FileVersion 2.20.x）：
-    // 目标版本必须与它 Major.Minor 一致，否则版本校验会正确地拒绝。
-    private const string CurVer = "2.20";
-    private const string TargetVer = "2.20.1";
+    // 夹具 exe 是真实构建产物，版本随每次发版变化：用例里的「当前/目标/降级」版本
+    // 一律从夹具 FileVersion 推导，写死会导致每次升版后一批用例假失败。
+    private static string CurVer, TargetVer, DowngradeVer;
     private static int _pass, _fail;
     private static readonly StringBuilder Report = new StringBuilder();
     private static string _root;
@@ -69,24 +68,39 @@ internal static class UpdaterTests
 
     private static async Task RunAllAsync()
     {
+        // 版本基准全部来自夹具真实 FileVersion（MAJOR.MINOR），保证升版后用例仍然成立：
+        //   CurVer      = 当前安装版本（夹具本身）
+        //   TargetVer   = 一次正常升级的目标（同 MAJOR.MINOR，PATCH+1）
+        //   DowngradeVer= 更低的版本，用于降级拒绝
+        var fv = AumPackage.ReadFileVersion(FixtureExe) ?? "";
+        var parts = AumVersion.Parse(fv);
+        var major = parts.Length > 0 ? parts[0] : 1;
+        var minor = parts.Length > 1 ? parts[1] : 0;
+        CurVer = major + "." + minor;
+        TargetVer = major + "." + minor + ".1";
+        DowngradeVer = minor > 0 ? major + "." + (minor - 1) : Math.Max(0, major - 1) + ".0";
+        Console.WriteLine("夹具 FileVersion=" + fv + " → CurVer=" + CurVer
+            + " TargetVer=" + TargetVer + " DowngradeVer=" + DowngradeVer);
+
         // ---------------- 1. 正常升级（fd）
         {
             var env = await Scenario.BuildAsync(_root, "normal-fd", TargetVer, v => v);
             var (plan, result) = await env.RunAsync(CurVer, force: false, forcePackage: false);
             Check("正常升级（fd）· 策略",
-                "strategy=package 且 target=2.21",
+                "strategy=package 且 target=" + TargetVer,
                 plan.Strategy + " / " + plan.TargetVersion,
                 plan.Ok && plan.Strategy == "package" && plan.TargetVersion == TargetVer);
-            // 夹具是真实 v2.20 产物：替换后 FileVersion 仍是 2.20.0.0（内容与原来相同哈希也不同不了），
+            // 夹具就是当前版本的真实产物：替换后 FileVersion 不变（内容相同），
             // 因此这里断言"替换动作真正发生"：成功 + 备份存在 + 目标文件被替换过（mtime 更新）。
             Check("正常升级（fd）· 替换成功",
                 "ok=true 且目标文件被替换（mtime 更新 + 有备份）",
                 "ok=" + result.Ok + " err=" + result.Error + " replaced=" + env.TargetReplaced(),
                 result.Ok && env.TargetReplaced() && env.BakFiles().Count >= 1);
             Check("正常升级（fd）· 保留备份",
-                "存在 .bak-2.20-* 备份",
+                "存在 .bak-" + CurVer + "-* 备份",
                 env.BakFiles().Count == 0 ? "无备份" : string.Join(",", env.BakFiles()),
-                env.BakFiles().Count >= 1);
+                env.BakFiles().Count >= 1
+                    && env.BakFiles().Any(p => Path.GetFileName(p).Contains(".bak-" + CurVer + "-", StringComparison.Ordinal)));
         }
 
         // ---------------- 2. sha256 错误
@@ -94,7 +108,7 @@ internal static class UpdaterTests
             var env = await Scenario.BuildAsync(_root, "bad-sha", TargetVer, m => m.Replace("\"sha256\": \"", "\"sha256\": \"dead"));
             var (plan, result) = await env.RunAsync(CurVer, false, false);
             Check("sha256 错误 · 拒绝",
-                "ok=false 且目标 exe 仍为 2.20",
+                "ok=false 且目标 exe 仍为 " + CurVer,
                 "ok=" + result.Ok + " ver=" + env.TargetVersionNow(),
                 !result.Ok && env.TargetVersionNow().StartsWith(CurVer));
             Check("sha256 错误 · 不产生 .new/.bak",
@@ -173,10 +187,10 @@ internal static class UpdaterTests
 
         // ---------------- 9. inner 版本与清单不符
         {
-            // 清单声明 9.9，但包内 exe 是 2.20 → Major.Minor 不符，必须拒绝
+            // 清单声明 9.9，但包内 exe 是当前版本 → Major.Minor 不符，必须拒绝
             var env = await Scenario.BuildAsync(_root, "inner-ver", "9.9", m => m);
             var (plan, result) = await env.RunAsync(CurVer, false, false);
-            Check("inner 版本(2.20) 与清单(9.9) 不符 · 拒绝",
+            Check("inner 版本(" + CurVer + ") 与清单(9.9) 不符 · 拒绝",
                 "ok=false（Major.Minor 不匹配）",
                 "ok=" + result.Ok + " err=" + Trim(result.Error),
                 !result.Ok);
@@ -184,10 +198,10 @@ internal static class UpdaterTests
 
         // ---------------- 10. 降级
         {
-            var env = await Scenario.BuildAsync(_root, "downgrade", "2.19", v => v);
+            var env = await Scenario.BuildAsync(_root, "downgrade", DowngradeVer, v => v);
             var (plan, result) = await env.RunAsync(CurVer, false, false);
-            Check("降级（2.19 < 2.20）· 拒绝",
-                "plan.Ok=false 或 upToDate=true，且版本停在 2.20",
+            Check("降级（" + DowngradeVer + " < " + CurVer + "）· 拒绝",
+                "plan.Ok=false 或 upToDate=true，且版本停在 " + CurVer,
                 "ok=" + plan.Ok + " upToDate=" + plan.UpToDate + " ver=" + env.TargetVersionNow(),
                 (!plan.Ok || plan.UpToDate) && env.TargetVersionNow().StartsWith(CurVer));
         }
@@ -207,7 +221,7 @@ internal static class UpdaterTests
             var env = await Scenario.BuildAsync(_root, "same-force", CurVer, v => v);
             var (plan, result) = await env.RunAsync(CurVer, force: true, forcePackage: false);
             Check("同版本 force · 允许重装",
-                "plan.Target=2.20 且 result.ok=true",
+                "plan.Target=" + CurVer + " 且 result.ok=true",
                 "target=" + plan.TargetVersion + " ok=" + result.Ok + " err=" + Trim(result.Error),
                 plan.Ok && plan.TargetVersion == CurVer && result.Ok);
         }
@@ -469,28 +483,64 @@ internal static class UpdaterTests
             if (_fixtureExe != null) return _fixtureExe;
             // 优先用**单文件发布产物**：健康检查要求「单文件即可运行」，
             // bin 目录下的 apphost 依赖同目录 ServerUI.dll，直接复制会跑不起来。
-            var candidates = new[]
+            // 优先挑与本程序同版本的产物；bin 里常残留上次发版的单文件，退而求其次
+            // 也能用（用例的版本基准全部由夹具 FileVersion 推导，自洽）。
+            var selfVer = typeof(UpdaterTests).Assembly.GetName().Version;
+            var want = selfVer.Major + "." + selfVer.Minor;
+            var candidates = new List<string>();
+            candidates.Add(Path.Combine(AppContext.BaseDirectory, "ServerUI-有依赖版.exe"));
+            candidates.Add(Path.Combine(AppContext.BaseDirectory, "ServerUI.exe"));
+            candidates.Add(Compat.ExePath());
+            // bin 里没有当前版本的单文件产物时（典型情况：刚改完代码还没重新 publish），
+            // 退到项目的 publish 输出——那里才是真正的单文件发行产物。
+            var proj = FindProjectDir();
+            if (proj != null)
             {
-                Path.Combine(AppContext.BaseDirectory, "ServerUI-有依赖版.exe"),
-                Path.Combine(AppContext.BaseDirectory, "ServerUI.exe"),
-                Compat.ExePath()
-            };
-            var self = candidates.FirstOrDefault(p => !string.IsNullOrEmpty(p) && File.Exists(p)
-                && new FileInfo(p).Length > 1_000_000);
-            if (!string.IsNullOrEmpty(self) && File.Exists(self))
+                candidates.Add(Path.Combine(proj, "publish", "fd", "ServerUI-有依赖版.exe"));
+                candidates.Add(Path.Combine(proj, "publish", "sc", "ServerUI-无依赖版.exe"));
+            }
+            string self = null;
+            string selfVersion = null;
+            var scanned = new List<string>();
+            foreach (var p in candidates)
             {
+                if (string.IsNullOrEmpty(p) || !File.Exists(p)) continue;
+                if (new FileInfo(p).Length <= 1_000_000) { scanned.Add(Path.GetFileName(p) + "(非单文件)"); continue; }
+                var fv = AumPackage.ReadFileVersion(p) ?? "";
+                if (self == null) { self = p; selfVersion = fv; }
+                if (AumVersion.SameMajorMinor(fv, want)) { self = p; selfVersion = fv; break; }
+            }
+            if (self != null)
+            {
+                Console.WriteLine("exe 夹具：" + Path.GetFileName(self) + "（FileVersion=" + selfVersion
+                    + (AumVersion.SameMajorMinor(selfVersion, want) ? "，与程序同版本）" : "，与程序 " + want + " 不同版本，按夹具版本跑）"));
                 _fixtureExe = Path.Combine(_root, "fixture-ServerUI.exe");
                 if (!File.Exists(_fixtureExe)) File.Copy(self, _fixtureExe, true);
                 _fixtureBytes = File.ReadAllBytes(_fixtureExe);
                 return _fixtureExe;
             }
-            throw new InvalidOperationException("找不到可用于测试的 exe 夹具");
+            throw new InvalidOperationException("找不到可用于测试的单文件 exe 夹具；已检查："
+                + (scanned.Count == 0 ? "无候选文件" : string.Join(", ", scanned)));
         }
     }
 
     private static byte[] FixtureExeBytes
     {
         get { var _ = FixtureExe; return _fixtureBytes; }
+    }
+
+    /// <summary>从当前 EXE 位置向上找 ServerUI.Web.csproj（最多 8 层）。</summary>
+    private static string FindProjectDir()
+    {
+        try
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            for (var i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
+                if (File.Exists(Path.Combine(dir.FullName, "ServerUI.Web.csproj")))
+                    return dir.FullName;
+        }
+        catch { }
+        return null;
     }
 
     private static class ZipBuilder

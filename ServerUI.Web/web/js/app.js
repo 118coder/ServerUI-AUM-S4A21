@@ -46,7 +46,7 @@ const SUB = {
 
 // ------------------------------------------------------------------ 全局状态
 const state = {
-  version: '2.21',
+  version: '2.21.1',
   theme: 'dark',
   page: 'dash',
   mode: 'full',
@@ -242,6 +242,15 @@ function navigate(id) {
 }
 
 // ------------------------------------------------------------------ 标题栏
+/** 把程序版本写进窗口标题、标题栏版本号：版本号只有宿主一处真值。 */
+function applyVersionText(ver) {
+  if (!ver) return;
+  const tail = ' · ServerS4A21-AUM';
+  document.title = 'ServerS4A21 管理器 v' + ver + tail;
+  const tb = document.getElementById('tbVer');
+  if (tb) tb.textContent = 'v' + ver + tail;
+}
+
 function wireTitlebar() {
   const drag = document.getElementById('tbDrag');
   drag.addEventListener('mousedown', (ev) => {
@@ -499,6 +508,8 @@ async function boot() {
     setSub('正在连接宿主…');
     const init = await call('app.init', {});
     state.version = init.version || state.version;
+    // 版本文案运行时回填：静态 HTML 里的占位号只用于首帧，升版不必改多处
+    applyVersionText(state.version);
     state.page = init.page || 'dash';
     state.isAdmin = !!init.isAdmin;
     state.paths = init.paths || {};

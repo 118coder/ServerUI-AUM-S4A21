@@ -59,10 +59,10 @@ hasBuildEnvironment =
 ```json
 {
   "schema": 1,
-  "version": "2.21",
+  "version": "2.21.1",
   "channel": "stable",
   "minSupportedVersion": "2.0",
-  "notesUrl": "https://github.com/118coder/ServerUI-AUM-S4A21/releases/tag/v2.21",
+  "notesUrl": "https://github.com/118coder/ServerUI-AUM-S4A21/releases/tag/v2.21.1",
   "assets": [
     { "kind": "fd", "name": "ServerUI-fd.zip", "sha256": "<64hex>", "size": 1900000, "inner": "ServerUI-有依赖版.exe" },
     { "kind": "sc", "name": "ServerUI-sc.zip", "sha256": "<64hex>", "size": 70000000, "inner": "ServerUI-无依赖版.exe" }
@@ -120,7 +120,7 @@ hasBuildEnvironment =
 
 ```powershell
 cd <repo>
-powershell -ExecutionPolicy Bypass -File tools\make-release.ps1 -Version 2.21
+powershell -ExecutionPolicy Bypass -File tools\make-release.ps1 -Version 2.21.1
 ```
 
 脚本会：写 `AUM-version.txt` → publish 三个变体 → 打 3 个 zip → 算 SHA256/size → 生成 `latest.json` → 输出到 `release-files/`。
@@ -129,8 +129,8 @@ powershell -ExecutionPolicy Bypass -File tools\make-release.ps1 -Version 2.21
 
 ```bash
 git add AUM-version.txt
-git commit -m "release: v2.21"
-git tag v2.21
+git commit -m "release: v2.21.1"
+git tag v2.21.1
 git push origin main --tags
 ```
 
@@ -175,4 +175,6 @@ ServerUI.exe --healthcheck "%TEMP%\hc.json"
 ServerUI.exe --selftest    # 含 update.strategy / buildEnv
 ```
 
-`--updatetest` 覆盖：正常升级、sha256 错、size 错、清单版本与 tag 不符、缺形态资产、zip 缺 inner、zip-slip、inner 非 PE、inner 版本不符、降级、同版本非 force、同版本 force、清单缺字段、源码结构不符→发行包、有环境→编译且编译失败自动回退。
+`--updatetest` 共 19 项断言，覆盖：正常升级（策略 / 替换 / 备份）、sha256 错、size 错、清单版本与 tag 不符、缺形态资产、zip 缺 inner、zip-slip、inner 非 PE、inner 版本不符、降级、同版本非 force、同版本 force、清单缺字段、源码结构不符→转发行包、有构建环境→选源码编译、编译失败自动回退发行包。
+
+用例里的「当前 / 目标 / 降级」版本全部从夹具 exe 的真实 FileVersion 推导，升版后不需要改测试；夹具优先取与当前程序同版本的单文件产物，其次 `publish/fd|sc`，最后才退回 `bin` 里的历史产物。

@@ -164,9 +164,7 @@ ServerUI-有依赖版.exe --selftest
 
 ## 十一、v2.20 变更
 
-- 更新AUM 双通道：有构建环境优先源码编译（且校验源码含 `ServerUI.Web`），否则下载 Release 发行包；两者都做不到就明确报错。协议与发版流程见 `ServerUI.Web/docs/AUM-UPDATE.md`。旧的"护栏阻止"已移除。
 - 多开：`ServerStartAsync` 检测到服务端存活时跳过启动，直接 `LaunchGameClient()` 并返回 `reused:true`；前端 `wirePlay` 不再拦截「开始游戏」。`--playtest` 是沙箱验证入口（需 exe 目录有 `playtest.marker`，否则拒绝执行）。
-
 - 配色回归老版：控件色 = Ant Design 深色（`#141414 / #1C1C1C / #1668DC / #49AA19 / #DC4446 / #D89614`），日志色保留旧值（`#28A745 / #FD7E14 / #DC3545`，底 `#18181C`）。两套色板互不跟随。
 - 侧栏与内容区使用 `--bg`（页面底色），卡片/日志使用 `--surface`，恢复旧版层次。
 - DLL 排序改为 Pointer Events（`web/js/pages/dll.js`）；不要再改回 HTML5 `draggable`，真实 WebView2 里不可靠。
@@ -176,3 +174,13 @@ ServerUI-有依赖版.exe --selftest
 - 日志区跟随主题：深色用旧版 `#18181C` + 旧行色；浅色用 `#F5F5F7` + 深色行色（`--log-bg/--log-border/--log-hover/--log-*` 在 `tokens.css` 的 light 段覆盖）。不要再把浅色日志固定成黑底。
 - 启动动画测试钩子（仅测试环境）：`AUM_SPLASH_SNAPSHOT=1` 按渲染帧采样 PNG；`AUM_SPLASH_TIMING=1` 只统计帧间隔；`AUM_SPLASH_DELAY_MS` / `AUM_SPLASH_HOLD_MS` 控制延时与停留。正常启动不受影响。
 - 服务端控制台：`ServerService.Start` 用 `WindowStyle=Hidden`（CreateNoWindow 必须为 false，否则 DfoServer 无真实控制台会崩）；隐藏句柄走 `AttachConsole + GetConsoleWindow + ShowWindow`，不要再用 `Process.MainWindowHandle`（控制台归 conhost，实测恒为 0）。`--selftest` 的 `consoleHide` 探针会验证「窗口存在但不可见 + 可正常停服」。
+
+## 十二、v2.21 / v2.21.1 变更
+
+- 【更新AUM】双通道：有 .NET 10 SDK + PowerShell 5.1 + 磁盘 ≥2 GB + 源码含 `ServerUI.Web/ServerUI.Web.csproj` 与 `web/index.html` 时优先源码编译；否则下载 GitHub Release 发行包（`latest.json` 清单 + zip），校验后原子替换。编译失败会自动回退到发行包。协议、判定与发版流程见 `ServerUI.Web/docs/AUM-UPDATE.md`。
+- 强制发行包：设置页「更新AUM（强制发行包）」跳过编译，直接用发行包（`forcePackage:true`）。
+- 更新前置确认：点【更新AUM】先 `aum.plan` 取策略与目标版本，弹窗展示「当前 → 目标 / 策略 / 原因 / 包大小 / 回滚说明」，确认后才 `aum.update`。
+- 替换安全：`.new` → 目标目录内 `--healthcheck` 自检 → `.bak-<旧版本>-<时间戳>` → `File.Replace`；自检或替换失败保留原文件并给出手工恢复路径。健康检查探针用唯一临时名（`aum-probe-<guid8>.exe`）暂存在目标目录（单文件 exe 必须与 `ServerUI.dll` 同目录才能启动）。
+- `--updatetest` 用例版本基准改为从夹具真实 FileVersion 推导，夹具优先取与程序同版本的单文件产物（其次 `publish/fd|sc`，最后 `bin`）。这样升版不会再让一批用例假失败。
+- 窗口标题与标题栏版本号改为运行时按 `app.init` 回填（`applyVersionText()`），静态 HTML 里的数字只是首帧占位。
+- 版本 2.21.1；`AUM-version.txt` / csproj / `AppController.Version` / UserAgent / `app.js` 同步。
