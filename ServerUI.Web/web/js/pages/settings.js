@@ -61,7 +61,7 @@ export function renderSettings(pageEl, ctx) {
   // ---------------------------------------------------------------- 关于
   wrap.appendChild(h('div.card.set-about', [
     h('div.set-appname', { text: 'ServerS4A21 管理器' }),
-    h('div.set-ver', { text: 'v' + (ctx.version || '2.21') + ' · ServerS4A21-AUM' }),
+    h('div.set-ver', { text: 'v' + (ctx.version || '2.21.1') + ' · ServerS4A21-AUM' }),
     h('div.set-desc', {
       text: '基于 .NET 10 + WebView2 构建的自绘界面单机服务端管理工具：一键启停游戏服务、存档管理、增量更新、GM 工具等。',
     }),

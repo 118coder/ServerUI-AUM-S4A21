@@ -4,7 +4,7 @@
 
 ---
 
-> **v2.20 界面说明（2026-10-22）**：主界面已迁移到 .NET 10 WPF + WebView2，保留原配色、布局与全部功能；`ServerUI-兼容模式.exe` 与 `开始游戏-ServerUI.exe` 继续提供 Win7/旧入口。新版需要 WebView2 Runtime（Win10/11 通常已自带）。AUM 自更新目前有护栏：旧更新通道会编译 WinForms 源码并回退界面，点击只提示、不执行；新版源码发布后再切换。详见 `ServerUI-WebView2重构说明.md`。
+> **v2.21.1 界面说明（2026-10-23）**：主界面已迁移到 .NET 10 WPF + WebView2，保留原配色、布局与全部功能；`ServerUI-兼容模式.exe` 与 `开始游戏-ServerUI.exe` 继续提供 Win7/旧入口。新版需要 WebView2 Runtime（Win10/11 通常已自带）。【更新AUM】已改为双通道：有 .NET 10 SDK + PowerShell 5.1 + 源码结构时优先源码编译，否则直接下载 GitHub Release 的发行包校验后原子替换（`--healthcheck` 自检 + `.bak` 备份可回滚）。详见 `ServerUI-WebView2重构说明.md` 与 `ServerUI.Web/docs/AUM-UPDATE.md`。
 
 
 ## 项目简介

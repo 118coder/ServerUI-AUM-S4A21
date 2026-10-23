@@ -19,7 +19,7 @@
     输出目录，默认 <repo>/release-files。
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File tools\make-release.ps1 -Version 2.21
+    powershell -ExecutionPolicy Bypass -File tools\make-release.ps1 -Version 2.21.1
 
 .NOTES
     只写 OutDir 与 AUM-version.txt，不提交、不推送、不创建 Release。
