@@ -114,7 +114,7 @@ export function renderDash(pageEl, ctx) {
     type: 'button',
     'data-tip': 'WebView2 重构版：AUM 自更新暂未接入新版源码，点击只提示、不会回退界面',
   }, [icon('download'), h('span', { text: '更新AUM' })]), ctx);
-  const btnSdk = wireSdkInstall(h('button.btn', { type: 'button' }, [icon('cpu'), h('span', { text: '安装NET.10 SDK' })]), ctx);
+  const btnSdk = wireSdkInstall(h('button.btn', { type: 'button', id: 'btnSdkInstall' }, [icon('cpu'), h('span', { text: '安装NET.10 SDK' })]), ctx);
 
   const rightCard = h('div.card', [
     h('div.sec-title', [h('span', { text: '更新与工具' })]),

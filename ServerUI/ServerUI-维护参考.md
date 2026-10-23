@@ -306,7 +306,10 @@ GM：    dotnet publish dfogmtool\DfoGmTool.csproj -c Release -r win-x64 --self-
 - **兼容模式**：`ServerUI-兼容模式.exe` 与 `开始游戏-ServerUI.exe` 保持旧版，不随新界面更新；Win7 仍可用。
 
 12. **v2.20 界面色板（勿回退）**：控件色 = 老版 Ant Design 深色（`--bg #141414`、`--surface #1C1C1C`、`--primary #1668DC`、`--success #49AA19`、`--danger #DC4446`、`--warning #D89614`）；日志色 = 旧 MainForm 原值（`#28A745/#FD7E14/#DC3545`，底 `#18181C`）。两套色板互不跟随，改控件色不要连日志一起改。
-13. **日志区跟随主题**：`tokens.css` 深色段是旧版日志色（`#18181C` + `#28A745/#FD7E14/#DC3545`），light 段覆盖为 `#F5F5F7` + `#1A7F37/#B25E09/#CF1322`。`ui-shots.js` 的 `palette-dark/palette-light` 会分别断言两套日志色，改一处必须同步改断言。
-14. **启动动画只用合成层**：`MainWindow.xaml` 的 `Splash` 与 `web/index.html` 的 `.splash` 同构；动画只允许 `OpacityProperty` / `TranslateTransform` / `ScaleTransform` / `RotateTransform`。不要动画 `Width`/`Height`/`Margin`/`Padding`。弧线在 WebView2 就绪前持续旋转（`RepeatBehavior.Forever`），就绪后由 `HideSplash` 停表并淡出（会把动画时钟置 null，避免隐藏层持有渲染资源）。
-15. **服务端控制台必须不可见**：`ServerService.Start` 用 `WindowStyle=Hidden` + `CreateNoWindow=false`（不能改 true，DfoServer 需要真实控制台）；隐藏句柄只能用 `AttachConsole + GetConsoleWindow + ShowWindow`，`Process.MainWindowHandle` 对 cmd/conhost 恒为 0。`--selftest` 的 `consoleHide` 探针必须 `ok:true`。
-16. **DLL 排序只走 Pointer Events**：`dll.js` 手柄 `pointerdown` + 4px 阈值 + `insertBefore` 实时换位 + 松手一次 `dll.setOrder`。真实 WebView2 里 HTML5 `dragstart` 不可靠，不要再改回 `draggable`/`dataTransfer`。
+13. **更新AUM 是双通道，不要再加"护栏阻止"**：`AumUpdateService` 先 `PlanAsync` 判定（compile / package），`ExecuteAsync` 执行；旧 `AUM_ALLOW_LEGACY_SELFUPDATE` 护栏已废弃。发版必须走 `tools/make-release.ps1` + 打 tag（CI 会校验 tag 与 `AUM-version.txt` 一致）。改校验规则时同步 `--updatetest` 的 19 个用例（`ServerUI.Web/UpdaterTests.cs`）。
+14. **功能对照基线**：改动前后请对照《ServerUI-新旧功能对照.md》（旧版每个可点击控件 → 新版实现位置）。已知有意偏差（更新AUM 护栏、完整更新入口、主题化对话框、设置持久化）写在该文第十一节，不要当成遗漏去"修复"。
+15. **「开始游戏」不得因服务端在运行而拦截**：多开 DLL 依赖「服务端常驻 + 反复拉起客户端」。`ServerStartAsync` 在 `ServerAlive()` 为真时跳过启动、直接拉起客户端并返回 `reused:true`；前端 `wirePlay` 不能恢复「无需重复启动」的拦截。改动后用 `--playtest`（沙箱）或 `ui-shots.js` 的 `play-while-running` 断言验证。
+16. **日志区跟随主题**：`tokens.css` 深色段是旧版日志色（`#18181C` + `#28A745/#FD7E14/#DC3545`），light 段覆盖为 `#F5F5F7` + `#1A7F37/#B25E09/#CF1322`。`ui-shots.js` 的 `palette-dark/palette-light` 会分别断言两套日志色，改一处必须同步改断言。
+17. **启动动画只用合成层**：`MainWindow.xaml` 的 `Splash` 与 `web/index.html` 的 `.splash` 同构；动画只允许 `OpacityProperty` / `TranslateTransform` / `ScaleTransform` / `RotateTransform`。不要动画 `Width`/`Height`/`Margin`/`Padding`。弧线在 WebView2 就绪前持续旋转（`RepeatBehavior.Forever`），就绪后由 `HideSplash` 停表并淡出（会把动画时钟置 null，避免隐藏层持有渲染资源）。
+18. **服务端控制台必须不可见**：`ServerService.Start` 用 `WindowStyle=Hidden` + `CreateNoWindow=false`（不能改 true，DfoServer 需要真实控制台）；隐藏句柄只能用 `AttachConsole + GetConsoleWindow + ShowWindow`，`Process.MainWindowHandle` 对 cmd/conhost 恒为 0。`--selftest` 的 `consoleHide` 探针必须 `ok:true`。
+19. **DLL 排序只走 Pointer Events**：`dll.js` 手柄 `pointerdown` + 4px 阈值 + `insertBefore` 实时换位 + 松手一次 `dll.setOrder`。真实 WebView2 里 HTML5 `dragstart` 不可靠，不要再改回 `draggable`/`dataTransfer`。

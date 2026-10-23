@@ -41,13 +41,20 @@ export function openShell(ctx, kind, value) {
 // ---------------------------------------------------------------- 服务端动作
 export function wirePlay(btn, ctx) {
   btn.addEventListener('click', async () => {
-    if (serverRunning(ctx)) {
-      warnInapplicable(ctx, serverExternal(ctx) ? '服务端已在外部运行中，无需重复启动' : '服务端已在运行中，无需重复启动');
-      return;
-    }
-    const done = busy(btn, '正在启动…');
-    try { await call('server.start', {}, { timeout: 180000 }); }
-    catch (err) { say(ctx, 'error', String((err && err.message) || err)); }
+    // 服务端已在运行时不再拦截：多开 DLL 的用法就是「服务端常驻，反复拉起客户端」。
+    // 宿主收到 server.start 后会发现服务端存活，跳过启动步骤、只启动游戏客户端
+    // （返回 reused=true）。这里只调整按钮文案，避免用户以为在重启服务端。
+    const reuse = serverRunning(ctx);
+    const done = busy(btn, reuse ? '正在启动客户端…' : '正在启动…');
+    try {
+      const res = await call('server.start', {}, { timeout: 180000 });
+      if (res && res.reused) {
+        say(ctx, 'secondary', '>>> 服务端已在运行，本次仅启动游戏客户端（多开）');
+      }
+      if (res && res.game === 'none') {
+        warnInapplicable(ctx, '未找到 本地游戏S4.bat / 单机游戏启动.bat，无法启动客户端');
+      }
+    } catch (err) { say(ctx, 'error', String((err && err.message) || err)); }
     done();
     if (ctx && ctx.refreshStatus) ctx.refreshStatus();
   });
@@ -194,26 +201,88 @@ export function wireUpdateLog(btn, ctx) {
   return btn;
 }
 
-export function wireAumUpdate(btn, ctx) {
+/**
+ * 更新AUM：先取「计划」（会自动选发行包 / 源码编译），用主题化确认框把
+ * 当前版本 → 目标版本 / 采用策略 / 策略原因 / 包大小 / 失败回滚 说明清楚，确认后执行。
+ * forcePackage=true 时跳过源码编译，直接用发行包（设置页「强制使用发行包」入口）。
+ */
+export function wireAumUpdate(btn, ctx, opts) {
+  const o = opts || {};
   btn.addEventListener('click', async () => {
+    const forcePackage = !!o.forcePackage;
     const done = busy(btn, '检查中…');
+    let plan = null;
     try {
-      const r = await call('aum.update', {}, { timeout: 600000 });
-      if (r && r.blocked) toast('warning', r.error || 'AUM 自更新已阻止');
-    } catch (err) { say(ctx, 'error', String((err && err.message) || err)); }
+      plan = await call('aum.plan', { forcePackage }, { timeout: 180000 });
+    } catch (err) {
+      say(ctx, 'error', String((err && err.message) || err));
+      done();
+      return;
+    }
     done();
+
+    if (!plan || plan.ok === false) {
+      const msg = (plan && plan.error) || '检查更新失败';
+      say(ctx, 'error', msg);
+      toast('error', msg);
+      return;
+    }
+    if (plan.upToDate) {
+      say(ctx, 'secondary', '>>> [AUM更新] 已是最新版本 v' + (plan.current || ''));
+      toast('info', '已是最新版本 v' + (plan.current || ''));
+      return;
+    }
+
+    const strategyText = plan.strategyLabel || (plan.strategy === 'compile' ? '源码编译' : '发行包替换');
+    const sizeText = plan.packageBytes > 0 ? formatBytes(plan.packageBytes) : '';
+    const lines = [
+      '当前版本：v' + (plan.current || '?') + '  →  目标版本：v' + (plan.target || '?'),
+      '采用策略：' + strategyText,
+      '判定原因：' + (plan.reason || '—'),
+    ];
+    if (sizeText) lines.push('发行包大小：' + sizeText);
+    lines.push('', '更新前会校验包哈希与版本号，失败会自动回滚；完成后管理器将重启。');
+
+    const res = await openModal({
+      title: '更新 AUM 管理器',
+      text: lines.join('\n'),
+      buttons: [
+        { text: '开始更新', value: 'yes', primary: true },
+        { text: '取消', value: 'cancel' },
+      ],
+    });
+    if (res.value !== 'yes') return;
+
+    const done2 = busy(btn, '更新中…');
+    try {
+      const r = await call('aum.update', { forcePackage }, { timeout: 900000 });
+      if (r && r.upToDate) toast('info', '已是最新版本');
+      else if (r && r.ok === false) {
+        say(ctx, 'error', '更新失败：' + (r.error || '未知错误'));
+        toast('error', '更新失败，详情见日志');
+      } else if (r && r.restarting) {
+        toast('success', '已更新到 v' + r.target + '，正在重启');
+      }
+    } catch (err) {
+      say(ctx, 'error', String((err && err.message) || err));
+      toast('error', '更新失败，详情见日志');
+    }
+    done2();
   });
   return btn;
 }
 
+function formatBytes(n) {
+  if (!n || n < 1) return '';
+  var mb = n / (1024 * 1024);
+  return mb >= 1 ? mb.toFixed(1) + ' MB' : (n / 1024).toFixed(0) + ' KB';
+}
+
 export function wireSdkInstall(btn, ctx) {
   btn.addEventListener('click', async () => {
+    // 旧版 IS()：SDK 已就绪时仍会打开安装包，供修复/覆盖安装；这里不拦截。
     const sdkOk = !!(ctx && ctx.status && ctx.status.sdkOk);
-    if (sdkOk) {
-      say(ctx, 'warning', '>>> [SDK] .NET 10 SDK 已就绪，无需重复安装');
-      toast('warning', '.NET 10 SDK 已就绪，无需重复安装');
-      return;
-    }
+    if (sdkOk) say(ctx, 'secondary', '>>> [SDK] .NET 10 SDK 已就绪，仍将打开安装包（可用于修复/覆盖安装）');
     const done = busy(btn, '安装中…');
     try { await call('sdk.install', {}, { timeout: 0 }); }
     catch (err) { say(ctx, 'error', String((err && err.message) || err)); }

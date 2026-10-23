@@ -3,7 +3,7 @@
    - 行格式 [HH:mm:ss] 文本，最多 2000 行，只在上滚到底部时自动跟随
    - 追加支持批量：一批日志只做一次 DOM 插入 + 一次 scrollHeight 读取 + rAF 滚动
    - toolbar：跳过更新日志 / 镜像下载 两个开关 + 进度文字 + 复制 / 清空 / 折叠
-   - 分隔抓手：拖动改高度（min 80，max 窗口 42%），双击复位 190px
+   - 分隔抓手：拖动改高度（min 80，max 窗口 42%），双击折叠/展开（与旧版一致）
    ========================================================================== */
 
 import { h, icon } from './dom.js';
@@ -246,7 +246,8 @@ export function createLogPanel(refs, settings) {
       persist({ logHeight: currentHeight() });
     });
 
-    resizer.addEventListener('dblclick', () => applyHeight(DEFAULT_H));
+    // 与旧版一致：双击分隔条 = 折叠/展开日志区（不是复位高度）。
+    resizer.addEventListener('dblclick', () => setCollapsed(!collapsed));
   }
 
   // ---------- toolbar 开关 ----------

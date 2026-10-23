@@ -141,16 +141,18 @@ async function main() {
   // 宿主推导：_ad = exe 目录（其下无 "AUM管理组件" 子目录），_gr = _ad 的父目录 → ini/插件放这里
   const sandboxGr = path.dirname(sandboxBin);
   const exeDir = path.dirname(EXE);
-  const copyDir = (src, dst) => {
+  // 只复制 exe 本身（发布物是单文件）。不能递归复制 exe 目录：
+  // 部署版 exe 位于游戏根，递归会把整个游戏（含 AUM管理组件）复制进沙箱，
+  // 令 Paths.Ad 多穿一层 → GameGaurd.ini 写到错误位置、DLL 页空态。
+  const shallowCopy = (src, dst) => {
     fs.mkdirSync(dst, { recursive: true });
     for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
-      const a = path.join(src, ent.name);
-      const b = path.join(dst, ent.name);
-      if (ent.isDirectory()) copyDir(a, b);
-      else fs.copyFileSync(a, b);
+      if (!ent.isFile()) continue;
+      if (!/\.(exe|dll|json)$/i.test(ent.name)) continue;
+      fs.copyFileSync(path.join(src, ent.name), path.join(dst, ent.name));
     }
   };
-  copyDir(exeDir, sandboxBin);
+  shallowCopy(exeDir, sandboxBin);
   const SANDBOX_EXE = path.join(sandboxBin, path.basename(EXE));
   const managedPlugins = ['GameNative.dll', 'PreventMinimize.dll', 'MultiInstance.dll', 'AutoFire.dll',
     'EquipmentSwap.dll', 'DpsMeter.dll', 'CombatPower.dll', 'ImeFix.dll'];
@@ -271,11 +273,18 @@ async function main() {
       say('probe ' + method + ': ' + JSON.stringify(r).slice(0, 500));
       if (!r || r.timeout || !r.ok) fail('IPC ' + method + ' 未成功');
     }
-    // 旧版自更新护栏：必须返回 blocked，绝不能拉旧源码覆盖 WebView2 界面
+    // AUM 双通道：只验证「离线时的行为正确」，绝不在这里真的触发更新/替换。
+    //   预期：要么 upToDate，要么 ok=false 且错误信息里能看出网络/无 Release 的原因；
+    //   绝不允许在无 Release 时假装成功（silent success 会误导用户以为已更新）。
     const aumProbe = await probe('aum.update');
     say('probe aum.update: ' + JSON.stringify(aumProbe).slice(0, 400));
-    if (!aumProbe || aumProbe.timeout || !aumProbe.result || !aumProbe.result.blocked) {
-      fail('AUM 自更新护栏未生效（可能回退旧界面）');
+    if (!aumProbe || aumProbe.timeout || !aumProbe.result) {
+      fail('aum.update 无响应');
+    } else {
+      const r = aumProbe.result;
+      const legit = r.ok === true || r.ok === false;
+      if (!legit) fail('aum.update 返回结构异常: ' + JSON.stringify(r).slice(0, 200));
+      if (r.ok === false && !r.error) fail('aum.update 失败但未给出可读原因');
     }
 
     const serverRunning = !!(probes.status && probes.status.result && (probes.status.result.bat || probes.status.result.dfo));

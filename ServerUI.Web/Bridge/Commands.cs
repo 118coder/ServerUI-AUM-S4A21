@@ -34,7 +34,11 @@ internal sealed class Commands
     {
         Ui = ui;
         Settings = settings;
-        App = new AppController(ui, settings);
+        App = new AppController(ui, settings)
+        {
+            // 更新成功后复用真实退出路径（MainWindow.QuitNow），而不是 Environment.Exit
+            QuitHook = () => Shell("quit")
+        };
         Archive = new ArchiveController(ui, App);
         Dll = new DllController(ui);
         Time = new TimeController(ui);
@@ -147,7 +151,9 @@ internal sealed class Commands
             case "update.check":
                 return Deferred.Of(() => App.UpdateCheckAsync());
             case "aum.update":
-                return Deferred.Of(() => App.CheckAndUpdateAumAsync(a.Bool("force")));
+                return Deferred.Of(() => App.CheckAndUpdateAumAsync(a.Bool("force"), a.Bool("forcePackage")));
+            case "aum.plan":
+                return Deferred.Of(() => App.AumPlanAsync(a.Bool("forcePackage")));
             case "sdk.install":
                 return Deferred.Of(() => App.InstallSdkAsync());
 

@@ -93,12 +93,48 @@ public sealed partial class App : Application
             return;
         }
 
+        // ---- 健康检查（AUM 更新替换前验证新 exe；无窗口、无副作用）----
+        if (args.Length > 0 && args[0] == "--healthcheck")
+        {
+            var tokenFile = args.Length > 1 ? args[1] : "";
+            Diag("--healthcheck " + tokenFile);
+            int code;
+            try { code = HealthCheck.Run(tokenFile); }
+            catch { code = 2; }
+            Shutdown(code);
+            return;
+        }
+
         // ---- 只读自检（无窗口，供 CI/审稿）----
         if (args.Length > 0 && args[0] == "--selftest")
         {
             int code = 0;
             try { code = SelfTest.Run(); }
             catch (Exception ex) { Report(ex, "selftest"); code = 3; }
+            Shutdown(code);
+            return;
+        }
+
+        // ---- AUM 更新沙箱测试（本地 127.0.0.1 静态服务，绝不联网）----
+        if (args.Length > 0 && args[0] == "--updatetest")
+        {
+            int code;
+            try { code = UpdaterTests.Run(args); }
+            catch (Exception ex)
+            {
+                try { Console.Error.WriteLine(ex); } catch { }
+                code = 3;
+            }
+            Shutdown(code);
+            return;
+        }
+
+        // ---- 多开路径验证（仅沙箱：exe 目录须有 playtest.marker）----
+        if (args.Length > 0 && args[0] == "--playtest")
+        {
+            int code;
+            try { code = PlayProbe.Run(); }
+            catch (Exception ex) { Console.WriteLine("{\"ok\":false,\"error\":\"" + ex.Message + "\"}"); code = 3; }
             Shutdown(code);
             return;
         }

@@ -164,6 +164,9 @@ ServerUI-有依赖版.exe --selftest
 
 ## 十一、v2.20 变更
 
+- 更新AUM 双通道：有构建环境优先源码编译（且校验源码含 `ServerUI.Web`），否则下载 Release 发行包；两者都做不到就明确报错。协议与发版流程见 `ServerUI.Web/docs/AUM-UPDATE.md`。旧的"护栏阻止"已移除。
+- 多开：`ServerStartAsync` 检测到服务端存活时跳过启动，直接 `LaunchGameClient()` 并返回 `reused:true`；前端 `wirePlay` 不再拦截「开始游戏」。`--playtest` 是沙箱验证入口（需 exe 目录有 `playtest.marker`，否则拒绝执行）。
+
 - 配色回归老版：控件色 = Ant Design 深色（`#141414 / #1C1C1C / #1668DC / #49AA19 / #DC4446 / #D89614`），日志色保留旧值（`#28A745 / #FD7E14 / #DC3545`，底 `#18181C`）。两套色板互不跟随。
 - 侧栏与内容区使用 `--bg`（页面底色），卡片/日志使用 `--surface`，恢复旧版层次。
 - DLL 排序改为 Pointer Events（`web/js/pages/dll.js`）；不要再改回 HTML5 `draggable`，真实 WebView2 里不可靠。
