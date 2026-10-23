@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ServerUI.Services;
+using ServerUI.Web.Bridge.Aum;
 
 namespace ServerUI.Web.Bridge;
 
@@ -19,7 +20,7 @@ namespace ServerUI.Web.Bridge;
 /// </summary>
 internal sealed class AppController
 {
-    internal const string Version = "2.20";
+    internal const string Version = "2.21";
 
     // ---- 日志等级（对应旧 Lg 的 Color 语义；前端按 §6.4 配色） ----
     internal const string LDefault = "default";     // (240,240,245)
@@ -38,7 +39,6 @@ internal sealed class AppController
 
     internal readonly ServerService Server = new ServerService();
     internal readonly UpdateService Updater = new UpdateService();
-    internal readonly SelfUpdateService SelfUpdater = new SelfUpdateService();
     internal readonly MirrorUploadService MirrorUploader = new MirrorUploadService();
     internal readonly ArchiveService Archives = new ArchiveService();
 
@@ -68,15 +68,16 @@ internal sealed class AppController
 
     // 事件订阅用委托（不用方法组：L 有可选参数，方法组无法转换到 Action<string>）
     private readonly Action<string> MirrorLog;
-    private readonly Action<string> SelfUpdateLog;
     private readonly Action<string> UpdateLog;
+
+    /// <summary>退出宿主窗口（由 Commands 注入 Shell("quit")）。AUM 更新成功后调用。</summary>
+    internal Action QuitHook { get; set; }
 
     public AppController(IUi ui, SettingsStore store)
     {
         _ui = ui;
         _store = store;
         MirrorLog = m => L(m);
-        SelfUpdateLog = m => L(m);
         UpdateLog = OnUpdateOutput;
     }
 
@@ -205,6 +206,70 @@ internal sealed class AppController
         CheckDnf();
         RefreshStatus(force: true);
         StartStatusPolling();
+
+        // 旧版 Load 事件：检测 DNF → 状态 → 网络可达性 → AUM 自检。
+        // 这两步只写运行日志（不弹窗、不阻塞界面），缺失会让用户看不到网络/版本提示。
+        _ = Task.Run(async () =>
+        {
+            try { await CheckBasicNetworkAsync(); } catch { }
+            try { await CheckAumVersionAsync(); } catch { }
+        });
+    }
+
+    /// <summary>启动时的网络可达性检测（旧 CheckBasicNetwork，文案与分级一致）。</summary>
+    private async Task CheckBasicNetworkAsync()
+    {
+        L(">>> 正在检测网络可达性 (网页检测, 无API调用)...", LInfo);
+        try
+        {
+            var basic = await Updater.CheckBasicConnectivityAsync().ConfigureAwait(false);
+            foreach (var kv in basic)
+            {
+                var name = kv.Key;
+                var ms = kv.Value.LatencyMs;
+                string msg; string level;
+                if (!kv.Value.Reachable) { msg = name + " 不可达 (超时)"; level = LError; }
+                else if (ms <= 800) { msg = name + " 正常 (延迟 " + ms + " ms)"; level = LSuccess; }
+                else if (ms <= 3000) { msg = name + " 较慢 (延迟 " + ms + " ms), 建议开启科学上网"; level = LWarning; }
+                else { msg = name + " 极慢 (延迟 " + ms + " ms), 更新可能失败"; level = LError; }
+                L("[网络] " + msg, level);
+            }
+        }
+        catch { L("[网络] 检测异常，不影响正常使用。", LSecondary); }
+    }
+
+    /// <summary>
+    /// 启动时的 AUM 版本自检（旧 CheckAUMUpdate；只写日志，不触发更新）。
+    /// 只读 Releases 列表：不复用旧的 SelfUpdateService（它读的是旧 WinForms 仓库结构）。
+    /// </summary>
+    private async Task CheckAumVersionAsync()
+    {
+        L(">>> 正在检测 AUM 管理器更新...", LInfo);
+        try
+        {
+            using var http = AumNet.CreateClient();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var src = new AumGitHubSource();
+            var (list, error) = await src.ListAsync(http, AumNetPolicy.Strict, cts.Token, m => L(m, LSecondary)).ConfigureAwait(false);
+            if (list == null || list.Count == 0)
+            {
+                L("[AUM自检] " + (error ?? "仓库没有可用 Release") + "，跳过版本检测", LSecondary);
+                return;
+            }
+
+            var remote = list[0].Version;
+            var cmp = AumVersion.Compare(remote, Version);
+            if (cmp > 0)
+                L("[AUM自检] 发现新版本 v" + remote + "！当前版本 v" + Version + "，请点击【更新AUM】升级。", LSuccess);
+            else if (cmp < 0)
+                L("[AUM自检] 当前为开发版 v" + Version + "（高于仓库 v" + remote + "），无需更新。", LSecondary);
+            else
+                L("[AUM自检] 已是最新版本 v" + Version, LSecondary);
+        }
+        catch (Exception ex)
+        {
+            L("[AUM自检] 检测异常，不影响正常使用：" + ex.Message, LSecondary);
+        }
     }
 
     public object CheckDnf()
@@ -384,7 +449,7 @@ internal sealed class AppController
         // 上次更新信息（从 更新日志.txt 读取，走服务内缓存）
         var luText = LastUpdateText(out var luLevel);
 
-        var version = "2.20";
+        var version = "2.21";
         try { version = Updater.GetVersion(Paths.Ad); } catch { }
 
         var snapshot = BuildSnapshot(bat, dfo, stText, stLevel, luText, luLevel, version);
@@ -457,7 +522,7 @@ internal sealed class AppController
         else { stText = "● 未运行"; stLevel = LError; }
 
         var luText = LastUpdateText(out var luLevel);
-        var version = "2.20";
+        var version = "2.21";
         try { version = Updater.GetVersion(Paths.Ad); } catch { }
 
         return BuildSnapshot(bat, dfo, stText, stLevel, luText, luLevel, version);
@@ -479,6 +544,24 @@ internal sealed class AppController
     public async Task<object> ServerStartAsync()
     {
         L(">>> 点击了开始游戏", LInfo);
+
+        // 服务端已在运行（外部启动 / 上次会话遗留 / 已装多开 DLL 想再开一个客户端）：
+        // 不再启动第二个服务端，直接拉起游戏客户端。多开依赖的正是这条路径。
+        if (ServerAlive())
+        {
+            var externalOnly = !Server.IsBatRunning;
+            L(externalOnly
+                ? ">>> 检测到服务端已在运行（外部启动），跳过启动步骤，直接启动游戏客户端"
+                : ">>> 服务端已在运行，跳过启动步骤，直接启动游戏客户端", LWarning);
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1000).ConfigureAwait(false);
+                try { ServerService.HideDfoServerWindow(); } catch { }
+            });
+            var extra = LaunchGameClient();
+            RefreshStatus(force: true);
+            return new { started = false, reused = true, game = extra };
+        }
 
         L(">>> 正在启动 start-server.bat...", LInfo);
         Server.Start(Paths.ServerRoot);
@@ -1161,91 +1244,213 @@ internal sealed class AppController
     }
 
     // ================================================================
-    // AUM 自更新（旧 CheckAndUpdateAUM）
+    // AUM 自更新（v2.21：发行包直替 + 有环境时源码编译）
     // ================================================================
 
-    public async Task<object> CheckAndUpdateAumAsync(bool force)
+    private CancellationTokenSource _aumCts;
+
+    /// <summary>设置页「强制使用发行包」的最近一次结果（自检/日志可读）。</summary>
+    internal string LastAumStrategy { get; private set; }
+
+    /// <summary>
+    /// 只读规划：检测版本、严格校验清单、判定策略。前端用它渲染确认框。
+    /// 不下载发行包、不替换任何文件；源码探测阶段临时目录会在结束时删除。
+    /// </summary>
+    public async Task<object> AumPlanAsync(bool forcePackage)
     {
-        // 安全护栏：SelfUpdateService 仍指向旧版 WinForms 源码（ServerUI.csproj）。
-        // 重构版若走旧自更新会编译旧界面并替换本 exe，等于静默回退；新版源码发布前一律阻止。
-        if (Environment.GetEnvironmentVariable("AUM_ALLOW_LEGACY_SELFUPDATE") != "1")
-        {
-            L("[AUM更新] 当前为 WebView2 重构版，AUM 自更新仍指向旧版 WinForms 源码，继续会回退界面。", LWarning);
-            L("    已阻止本次更新；请手动替换 ServerUI-有依赖版.exe / ServerUI-无依赖版.exe。", LSecondary);
-            return new
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+        var svc = new AumUpdateService(
+            new AumUpdateOptions
             {
-                ok = false,
-                blocked = true,
-                error = "当前为 WebView2 重构版，AUM 自更新暂未接入新版源码（继续会回退旧界面），已阻止"
-            };
+                CurrentVersion = Version,
+                ExePath = Compat.ExePath(),
+                Force = false,
+                ForcePackage = forcePackage
+            },
+            NewAumContext(),
+            new AumGitHubSource(),
+            AumNetPolicy.Strict);
+
+        var plan = await svc.PlanAsync(cts.Token).ConfigureAwait(false);
+        LastAumStrategy = plan.Strategy;
+        if (!plan.Ok) L("[AUM更新] 规划失败：" + plan.Error, LError);
+        else L("[AUM更新] 策略：" + plan.StrategyLabel + "（" + plan.Reason + "）", plan.Strategy == "compile" ? LSuccess : LWarning);
+        return plan.ToJson();
+    }
+
+    /// <summary>
+    /// aum.update：{ force?, forcePackage? }
+    /// 有完整构建环境且源码结构正确 → dotnet publish 当前 ServerUI.Web 工程；
+    /// 否则下载发行包直替。编译失败自动回退发行包。
+    /// </summary>
+    public async Task<object> CheckAndUpdateAumAsync(bool force, bool forcePackage)
+    {
+        if (_aumCts != null)
+        {
+            L("[AUM更新] 已有 AUM 更新任务在进行中，请等待其完成。", LWarning);
+            return new { ok = false, busy = true, error = "已有 AUM 更新任务在进行中" };
         }
 
         await CheckLeftoverPs1PromptAsync().ConfigureAwait(false);
 
-        if (!_hasSdk)
-        {
-            L("[AUM更新] 需要 .NET 10 SDK 才能自更新，请先点击【安装NET.10 SDK】安装。", LError);
-            return new { ok = false, error = "需要 .NET 10 SDK" };
-        }
+        _aumCts = new CancellationTokenSource();
+        var token = _aumCts.Token;
 
-        L(">>> 正在连接 GitHub 检测 AUM 管理器更新...", LInfo);
-
-        bool hasUpdate;
-        try { hasUpdate = await SelfUpdater.CheckForUpdateAsync(Version).ConfigureAwait(false); }
-        catch (Exception ex)
-        {
-            L("[AUM更新] 检测失败: " + ex.Message, LError);
-            return new { ok = false, error = ex.Message };
-        }
-
-        if (!hasUpdate && !force)
-        {
-            if (SelfUpdater.RemoteVersion != null)
-            {
-                if (SelfUpdater.CompareVersion(SelfUpdater.RemoteVersion, Version) < 0)
-                {
-                    L("[AUM更新] 当前已是开发版 v" + Version + "（高于仓库 v" + SelfUpdater.RemoteVersion + "）。", LSecondary);
-                    var yes = await ConfirmAsync("AUM自更新",
-                        "当前版本 v" + Version + " 高于仓库版本 v" + SelfUpdater.RemoteVersion + "（开发版）。\n\n是否强制从仓库拉取源码重新编译？",
-                        "question").ConfigureAwait(false);
-                    if (!yes) return new { ok = false, cancelled = true };
-                }
-                else
-                {
-                    L("[AUM更新] 已是最新版本 v" + Version + "，是否强制重新编译？", LWarning);
-                    var yes = await ConfirmAsync("AUM自更新",
-                        "当前已是最新版本 v" + Version + "。\n\n点击【是】强制从仓库拉取源码重新编译（同步最新改动）。\n点击【否】跳过。",
-                        "question").ConfigureAwait(false);
-                    if (!yes) return new { ok = false, cancelled = true };
-                }
-            }
-            else
-            {
-                var yes = await ConfirmAsync("AUM自更新",
-                    "无法连接 GitHub 检测版本。\n\n点击【是】仍然尝试从仓库拉取源码编译。\n点击【否】取消。",
-                    "warning").ConfigureAwait(false);
-                if (!yes) return new { ok = false, cancelled = true };
-            }
-        }
-        else if (hasUpdate)
-        {
-            L("[AUM更新] 发现新版本 v" + SelfUpdater.RemoteVersion + "，当前 v" + Version, LSuccess);
-        }
-
-        L("[AUM更新] 开始自动下载源码并编译...", LInfo);
-        SelfUpdater.OutputReceived += SelfUpdateLog;
         try
         {
-            var localDir = Path.Combine(Paths.Ad, Directory.Exists(Path.Combine(Paths.Ad, "ServerUI")) ? "ServerUI" : ".");
-            await SelfUpdater.RunUpdateAsync(localDir).ConfigureAwait(false);
-            return new { ok = true };
+            L(">>> 正在检测 AUM 管理器更新（发行包直替 / 源码编译 双通道）...", LInfo);
+            L("[AUM更新] 当前版本 v" + Version + "，运行形态：" + (IsPortableExe() ? "自包含版（无依赖）" : "框架依赖版（有依赖）"),
+                LSecondary);
+
+            var svc = new AumUpdateService(
+                new AumUpdateOptions
+                {
+                    CurrentVersion = Version,
+                    ExePath = Compat.ExePath(),
+                    Force = force,
+                    ForcePackage = forcePackage
+                },
+                NewAumContext(),
+                new AumGitHubSource(),
+                AumNetPolicy.Strict);
+
+            var plan = await svc.PlanAsync(token).ConfigureAwait(false);
+            LastAumStrategy = plan.Strategy;
+
+            if (!plan.Ok)
+            {
+                L("[AUM更新] " + plan.Error, LError);
+                return new { ok = false, error = plan.Error };
+            }
+
+            if (plan.UpToDate)
+            {
+                L("[AUM更新] 已是最新版本 v" + plan.CurrentVersion + "。", LSuccess);
+                _ui.Toast("info", "已是最新版本 v" + plan.CurrentVersion);
+                return new { ok = true, upToDate = true, current = plan.CurrentVersion, target = plan.TargetVersion };
+            }
+
+            // 目标版本必须严格大于当前（force 同版本重装除外）——再兜一道底
+            var cmp = AumVersion.Compare(plan.TargetVersion, Version);
+            if (cmp < 0 && Environment.GetEnvironmentVariable("AUM_ALLOW_AUM_DOWNGRADE") != "1")
+            {
+                var msg = "拒绝版本降级：目标 v" + plan.TargetVersion + " 低于当前 v" + Version;
+                L("[AUM更新] " + msg, LError);
+                return new { ok = false, error = msg };
+            }
+
+            L("[AUM更新] 发现目标版本 v" + plan.TargetVersion + "（当前 v" + Version + "）", LSuccess);
+            L("[AUM更新] 采用策略：" + plan.StrategyLabel + "。原因：" + plan.Reason, LInfo);
+            if (plan.PackageBytes > 0)
+                L("[AUM更新] 发行包大小：" + AumNet.FormatSize(plan.PackageBytes), LSecondary);
+
+            var result = await svc.ExecuteAsync(plan, token).ConfigureAwait(false);
+
+            if (!result.Ok)
+            {
+                L("[AUM更新] 更新失败：" + result.Error, LError);
+                L("    建议：1) 检查网络是否能访问 github.com；2) 查看上方日志定位失败阶段；3) 也可手动下载 " +
+                  "ServerUI-fd.zip / ServerUI-sc.zip 覆盖同目录的 exe。", LWarning);
+                return new { ok = false, error = result.Error, strategy = result.Strategy, staged = result.NewExePath };
+            }
+
+            if (result.UpToDate)
+                return new { ok = true, upToDate = true, current = Version, target = Version };
+
+            if (result.Deferred)
+            {
+                L(">>> 替换由后台脚本完成：退出后请稍候，管理器会自动以新版本启动。", LWarning);
+                L("    结果写入：" + result.ResultFile, LSecondary);
+                _ui.Toast("warning", "即将退出并完成后台替换");
+                ScheduleRestartAndQuit(result.RestartExe);
+                return new
+                {
+                    ok = true,
+                    deferred = true,
+                    strategy = result.Strategy,
+                    current = Version,
+                    target = result.TargetVersion,
+                    resultFile = result.ResultFile
+                };
+            }
+
+            L(">>> AUM 更新完成：v" + Version + " → v" + result.TargetVersion + "，正在重启...", LSuccess);
+            L("[AUM更新] 备份：" + (result.BackupPath ?? "(无)"), LSecondary);
+            if (result.PackageBytes > 0)
+                L("[AUM更新] 另一形态的 exe 未同步，如需请手动替换。", LSecondary);
+            _ui.Toast("success", "已更新到 v" + result.TargetVersion + "，正在重启");
+
+            ScheduleRestartAndQuit(result.RestartExe);
+            return new
+            {
+                ok = true,
+                strategy = result.Strategy,
+                current = Version,
+                target = result.TargetVersion,
+                backup = result.BackupPath,
+                restarting = true
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            L("[AUM更新] 已取消", LWarning);
+            return new { ok = false, cancelled = true, error = "已取消" };
         }
         catch (Exception ex)
         {
-            L("[AUM更新] 失败: " + ex.Message, LError);
+            L("[AUM更新] 异常：" + ex.Message, LError);
             return new { ok = false, error = ex.Message };
         }
-        finally { SelfUpdater.OutputReceived -= SelfUpdateLog; }
+        finally
+        {
+            _aumCts?.Dispose();
+            _aumCts = null;
+            _ui.Progress(0, "", false);
+        }
+    }
+
+    /// <summary>把 AumUpdateService 的输出接回现有的 log/progress/toast 通道。</summary>
+    private AumUpdateContext NewAumContext() => new AumUpdateContext
+    {
+        Log = (level, text) => L(text, level),
+        Progress = (value, label) =>
+        {
+            if (string.IsNullOrEmpty(label)) _ui.Progress(0, "", false);
+            else _ui.Progress(value, label, true);
+        },
+        Toast = (level, text) => _ui.Toast(level, text),
+        Diag = m => App.Diag(m)
+    };
+
+    /// <summary>替换成功后：延迟 1.2s 启动新 exe，再走现有退出清理（QuitHook → MainWindow.QuitNow）。</summary>
+    private void ScheduleRestartAndQuit(string exePath)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1200).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exePath,
+                        WorkingDirectory = Path.GetDirectoryName(exePath),
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                L("[AUM更新] 启动新版本失败：" + ex.Message + "，请手动运行：" + exePath, LError);
+                return;
+            }
+
+            try { await Task.Delay(700).ConfigureAwait(false); } catch { }
+
+            // 复用现有退出清理（保存运行日志 / 停服 / 杀 GM 工具 / 清临时目录）
+            try { QuitHook?.Invoke(); } catch { }
+        });
     }
 
     // ================================================================

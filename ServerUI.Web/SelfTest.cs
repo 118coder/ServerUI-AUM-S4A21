@@ -79,6 +79,34 @@ internal static class SelfTest
         try { windowMode = commands.Invoke("window.mode", null); }
         catch (Exception ex) { error = (error == null ? "" : error + " | ") + "window.mode: " + ex.Message; exitCode = 8; }
 
+        // AUM 更新能力快照（纯本地探测，不联网）：让审稿/CI 看到"会走哪条通道"。
+        object updateInfo;
+        try
+        {
+            var env = ServerUI.Web.Bridge.Aum.AumEnvironmentProbe.Probe(Compat.ExePath());
+            var selfContained = false;
+            try
+            {
+                var exe = Compat.ExePath();
+                selfContained = !string.IsNullOrEmpty(exe) && File.Exists(exe) && new FileInfo(exe).Length > 50_000_000;
+            }
+            catch { }
+            updateInfo = new
+            {
+                current = AppController.Version,
+                shape = selfContained ? "sc" : "fd",
+                strategy = env.SdkOk && env.PowerShellOk && env.DiskOk ? "compile-eligible" : "package",
+                buildEnv = new
+                {
+                    sdkOk = env.SdkOk, sdkVersion = env.SdkVersion,
+                    powerShellOk = env.PowerShellOk, powerShellVersion = env.PowerShellVersion,
+                    diskOk = env.DiskOk, freeGB = Math.Round(env.FreeBytes / 1073741824.0, 1)
+                },
+                note = "只做本地探测；实际策略在点击更新时联网读取 Release 清单后再定（源码结构不符会回退发行包）"
+            };
+        }
+        catch (Exception ex) { updateInfo = new { error = ex.Message }; }
+
         // v2.20：控制台隐藏自检（隔离沙箱，不启动真实服务端、不写游戏目录）
         object consoleHide = null;
         try { consoleHide = ConsoleHideProbe.Run(); }
@@ -94,6 +122,7 @@ internal static class SelfTest
             machine = Environment.MachineName,
             os = Environment.OSVersion.VersionString,
             isAdmin = Paths.IsAdmin,
+            update = updateInfo,
             consoleHide,
             error,
             paths = new

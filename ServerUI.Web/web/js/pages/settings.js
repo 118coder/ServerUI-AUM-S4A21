@@ -22,6 +22,29 @@ const BUILD_TIP = '调用【AUM管理组件\\进行本地编译.bat】，用【A
 const PENDING_TIP = '功能已暂时移除（S4A21 版本已无此问题），按钮保留待定';
 const PATCH_TIP = '把 实用工具包\\DLL覆盖\\客户端补丁.zip 完整安装到游戏根目录：复制补丁文件（GameGaurd.dll / az.dll / 插件 DLL / 配置 ini 等）并合并 GameGaurd.ini 的 [Plugins] 列表（受管插件默认全启用，已编辑过的配置 ini 保留不覆盖）';
 
+/** 「更新AUM（强制发行包）」：以 forcePackage=true 走与首页同一个更新流程。 */
+async function doForcePackageUpdate(say, ctx) {
+  const res = await call('aum.plan', { forcePackage: true }, { timeout: 180000 }).catch((err) => ({ ok: false, error: String(err.message || err) }));
+  if (!res || res.ok === false) {
+    const msg = (res && res.error) || '检查更新失败';
+    say('error', msg);
+    toast('error', msg);
+    return;
+  }
+  if (res.upToDate) { toast('info', '已是最新版本 v' + (res.current || '')); return; }
+  const res2 = await confirmModal('更新 AUM（强制发行包）',
+    '当前版本：v' + (res.current || '?') + '  →  目标版本：v' + (res.target || '?') + '\n'
+    + '将跳过源码编译，直接下载发行包并校验替换。\n'
+    + (res.packageBytes > 0 ? '包大小：' + (res.packageBytes / 1048576).toFixed(1) + ' MB\n' : '')
+    + '\n完成后管理器将重启，继续？', '开始更新', 'primary');
+  if (res2.value !== 'yes') return;
+  const r = await call('aum.update', { forcePackage: true }, { timeout: 900000 })
+    .catch((err) => ({ ok: false, error: String(err.message || err) }));
+  if (r && r.upToDate) toast('info', '已是最新版本');
+  else if (r && r.ok === false) { say('error', '更新失败：' + (r.error || '未知错误')); toast('error', '更新失败，详情见日志'); }
+  else if (r && r.restarting) toast('success', '已更新到 v' + r.target + '，正在重启');
+}
+
 export function renderSettings(pageEl, ctx) {
   const log = ctx.log;
   const say = (level, text) => { if (log && log.append) log.append(level, text); };
@@ -38,7 +61,7 @@ export function renderSettings(pageEl, ctx) {
   // ---------------------------------------------------------------- 关于
   wrap.appendChild(h('div.card.set-about', [
     h('div.set-appname', { text: 'ServerS4A21 管理器' }),
-    h('div.set-ver', { text: 'v' + (ctx.version || '2.20') + ' · ServerS4A21-AUM' }),
+    h('div.set-ver', { text: 'v' + (ctx.version || '2.21') + ' · ServerS4A21-AUM' }),
     h('div.set-desc', {
       text: '基于 .NET 10 + WebView2 构建的自绘界面单机服务端管理工具：一键启停游戏服务、存档管理、增量更新、GM 工具等。',
     }),
@@ -75,9 +98,15 @@ export function renderSettings(pageEl, ctx) {
     toast('info', '【待定】功能已暂时移除（S4A21 版本已无此问题）');
   });
   const rowPatch = toolRow('新DLL安装', 'success', 'download', PATCH_TIP, () => doInstallPatch(say, ctx));
+  // 强制发行包：SDK 环境齐全但仍想省去编译时间的用户，可直接走发行包替换。
+  const rowPkg = toolRow('更新AUM（强制发行包）', '', 'download',
+    '跳过源码编译，直接下载 GitHub Release 的发行包并校验替换（适合机器已装 SDK 但不想等编译）',
+    () => doForcePackageUpdate(say, ctx));
+
   tools.appendChild(rowBuild);
   tools.appendChild(rowPending);
   tools.appendChild(rowPatch);
+  tools.appendChild(rowPkg);
   wrap.appendChild(tools);
 
   pageEl.appendChild(wrap);

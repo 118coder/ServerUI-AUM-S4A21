@@ -1,0 +1,95 @@
+name: Release AUM Manager
+
+# 打 tag（v2.21 / v2.21.1）或手工 dispatch 时，编译三个变体、生成 latest.json，
+# 并创建非 draft / 非 prerelease 的 GitHub Release。
+# 客户端【更新AUM】的「发行包直替」通道消费这里上传的资产。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 2.21）'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $v = '${{ github.event.inputs.version }}'.Trim()
+          } else {
+            $v = '${{ github.ref_name }}'.Trim()
+            if ($v.StartsWith('v') -or $v.StartsWith('V')) { $v = $v.Substring(1) }
+          }
+          if ($v -notmatch '^\d+\.\d+(\.\d+)?$') { throw "非法版本号：$v" }
+          $fileVer = (Get-Content AUM-version.txt -Raw -Encoding UTF8).Trim()
+          if ($fileVer -ne $v) {
+            throw "AUM-version.txt=$fileVer 与 tag/input v$v 不一致：请先提交版本号再打 tag（防错配）"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "发布版本：v$v"
+
+      - name: Build release assets
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/make-release.ps1 -Version ${{ steps.ver.outputs.version }}
+
+      - name: Verify assets
+        shell: pwsh
+        run: |
+          $need = @('latest.json','ServerUI-fd.zip','ServerUI-sc.zip')
+          foreach ($f in $need) {
+            if (-not (Test-Path "release-files/$f")) { throw "缺少资产：$f" }
+          }
+          $m = Get-Content release-files/latest.json -Raw | ConvertFrom-Json
+          if ($m.schema -ne 1) { throw "schema 必须为 1" }
+          if ($m.channel -ne 'stable') { throw "channel 必须为 stable" }
+          if ($m.version -ne '${{ steps.ver.outputs.version }}') { throw "清单版本与 tag 不一致" }
+          foreach ($a in $m.assets) {
+            $p = "release-files/$($a.name)"
+            $h = (Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($h -ne $a.sha256) { throw "$($a.name) 的 sha256 与清单不一致" }
+            if ((Get-Item $p).Length -ne $a.size) { throw "$($a.name) 的 size 与清单不一致" }
+          }
+          Write-Host '资产校验通过'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: v${{ steps.ver.outputs.version }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            release-files/latest.json
+            release-files/ServerUI-fd.zip
+            release-files/ServerUI-sc.zip
+            release-files/ServerUI-compat.zip
+          body: |
+            ## AUM 管理器 v${{ steps.ver.outputs.version }}
+
+            本次发行包含：
+            - `ServerUI-fd.zip` — 框架依赖版（需 .NET 10 运行时）
+            - `ServerUI-sc.zip` — 自包含版（免安装运行时）
+            - `latest.json` — 更新清单（哈希/大小/版本，供管理器自动更新校验）
+
+            管理器内点【更新AUM】即可自动升级：有构建环境优先源码编译，否则直接下载本发行包替换。

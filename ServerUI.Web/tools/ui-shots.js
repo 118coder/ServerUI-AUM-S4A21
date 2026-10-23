@@ -470,6 +470,21 @@ const MOCK = String.raw`
       case 'server.start': calls.push({ method: 'server.start' }); reply(id, { ok: true }); break;
       case 'server.stop': calls.push({ method: 'server.stop' }); reply(id, { ok: true }); break;
       case 'server.restart': calls.push({ method: 'server.restart' }); reply(id, { ok: true }); break;
+      case 'sdk.install': calls.push({ method: 'sdk.install' }); reply(id, { ok: true }); break;
+      case 'aum.plan':
+        calls.push({ method: 'aum.plan', forcePackage: !!a.forcePackage });
+        reply(id, {
+          ok: true, upToDate: false, current: '2.20', target: '2.20.1',
+          strategy: a.forcePackage ? 'package' : 'compile',
+          strategyLabel: a.forcePackage ? '发行包替换' : '源码编译',
+          reason: a.forcePackage ? '已强制使用发行包' : '构建环境完整：.NET 10.0.303 + PowerShell 5.1',
+          packageBytes: 1896885
+        });
+        break;
+      case 'aum.update':
+        calls.push({ method: 'aum.update', forcePackage: !!a.forcePackage });
+        reply(id, { ok: true, strategy: a.forcePackage ? 'package' : 'compile', current: '2.20', target: '2.20.1', restarting: true });
+        break;
       case 'window.mode': {
         // 与宿主语义一致：非法值回落 full 并回报 ok:false；切换后推送 window.mode
         const want = String(a.mode || '').trim().toLowerCase();
@@ -1114,6 +1129,30 @@ async function main() {
       if (probe.pureBlack.length) report.push('!! ' + name + ' 出现纯黑块: ' + JSON.stringify(probe.pureBlack));
       return bad.length === 0;
     }
+
+    /* ---------------------------------------------------------------- v2.20 多开：服务端运行中也能开始游戏 */
+    // 多开 DLL 的用法是「服务端常驻 + 反复拉起客户端」，前端不得再拦截「开始游戏」。
+    await cdp.evaluate("document.querySelector('[data-nav=\"dash\"]').click()");
+    await wait(240);
+    await cdp.evaluate("window.__mock.setServerRunning(true)");
+    await wait(420);
+    const multiBefore = await cdp.evaluate("window.__mock.calls.length");
+    await cdp.evaluate(`(() => {
+      const b = Array.from(document.querySelectorAll('#page button.btn.success')).find((x) => x.textContent.indexOf('开始游戏') >= 0);
+      if (b) b.click();
+    })()`);
+    let multiOk = false;
+    for (let i = 0; i < 40; i++) {
+      const calls = await cdp.evaluate("(window.__mock.calls || []).slice()");
+      if (calls.slice(multiBefore).some((c) => c.method === 'server.start')) { multiOk = true; break; }
+      await wait(100);
+    }
+    const multiToast = await cdp.evaluate("Array.from(document.querySelectorAll('.toast')).map(t => t.textContent).join(' | ')");
+    report.push('play-while-running: ' + JSON.stringify({ called: multiOk, toast: multiToast }));
+    if (!multiOk) report.push('!! 服务端运行中点击「开始游戏」未调用 server.start（多开被前端拦截）');
+    if (String(multiToast).indexOf('无需重复启动') >= 0) report.push('!! 仍在提示「无需重复启动」，多开被拦截');
+    await cdp.evaluate("window.__mock.setServerRunning(false)");
+    await wait(220);
 
     await setTheme(cdp, 'dark');
     await wait(280);
@@ -2012,7 +2051,7 @@ async function main() {
     if (JSON.stringify(setFacts.linkNames) !== JSON.stringify(['ServerUI-仓库', 'ServerS4A21-主源仓库', 'GM工具-主源仓库', 'GM 工具'])) {
       report.push('!! 设置页链接名称不符: ' + JSON.stringify(setFacts.linkNames));
     }
-    if (JSON.stringify(setFacts.tools) !== JSON.stringify(['进行本地编译', '待定', '新DLL安装'])) {
+    if (JSON.stringify(setFacts.tools) !== JSON.stringify(['进行本地编译', '待定', '新DLL安装', '更新AUM（强制发行包）'])) {
       report.push('!! 设置页实用工具按钮不符: ' + JSON.stringify(setFacts.tools));
     }
     if (setFacts.appName !== 'ServerS4A21 管理器') report.push('!! 关于卡名称不符');
@@ -2069,9 +2108,16 @@ async function main() {
       }
       if (patchModal.buttons.indexOf('开始安装') < 0) report.push('!! 新DLL安装确认缺少「开始安装」');
     }
+    // 只点「当前可见」的那个模态里的按钮：历史上多个 modal-mask 叠加时，
+    // 全局 querySelector 会命中旧层，导致"点了但没触发"。
     await cdp.evaluate(`(() => {
-      const b = Array.from(document.querySelectorAll('.modal-mask .m-foot .btn')).find((x) => x.textContent.trim() === '开始安装');
-      if (b) b.click();
+      const masks = Array.from(document.querySelectorAll('.modal-mask')).filter((m) => m.offsetParent !== null || getComputedStyle(m).display !== 'none');
+      const mask = masks[masks.length - 1];
+      if (!mask) return false;
+      const b = Array.from(mask.querySelectorAll('.m-foot .btn')).find((x) => x.textContent.trim() === '开始安装');
+      if (!b) return false;
+      b.click();
+      return true;
     })()`);
     await wait(460);
     const patchCalls = await cdp.evaluate("window.__mock.calls.slice()");
@@ -2080,6 +2126,72 @@ async function main() {
     report.push('settings-install-toast: ' + JSON.stringify(patchToasts));
     if (!patchCalls.some((c) => c.method === 'dll.installPatch')) report.push('!! 确认后未调用 dll.installPatch');
     if (!patchToasts.some((t) => String(t).indexOf('客户端补丁已安装') >= 0)) report.push('!! 安装成功后未 toast 结果');
+
+    // 更新AUM：必须先弹「策略确认框」（当前→目标 / 策略 / 原因 / 包大小），确认后才执行
+    await cdp.evaluate("document.querySelector('[data-nav=\"dash\"]').click()");
+    await wait(220);
+    await cdp.evaluate("window.__mock.clearCalls()");
+    await cdp.evaluate(`(() => {
+      const b = Array.from(document.querySelectorAll('#page button.btn')).find((x) => x.textContent.indexOf('更新AUM') >= 0 && x.textContent.indexOf('强制') < 0);
+      if (b) b.click();
+    })()`);
+    let aumModal = { open: false };
+    for (let i = 0; i < 40; i++) {
+      aumModal = await cdp.evaluate(`(() => {
+        const masks = Array.from(document.querySelectorAll('.modal-mask'));
+        const m = masks[masks.length - 1];
+        if (!m) return { open: false };
+        return {
+          open: true,
+          title: (m.querySelector('.m-title') || {}).textContent,
+          text: (m.querySelector('.m-text') || {}).textContent,
+          buttons: Array.from(m.querySelectorAll('.m-foot .btn')).map((x) => x.textContent.trim())
+        };
+      })()`);
+      if (aumModal.open) break;
+      await wait(100);
+    }
+    report.push('aum-plan-confirm: ' + JSON.stringify(aumModal));
+    if (!aumModal.open) report.push('!! 更新AUM 未弹策略确认框');
+    else {
+      const t = String(aumModal.text || '');
+      if (t.indexOf('当前版本：v2.20') < 0 || t.indexOf('目标版本：v2.20.1') < 0) {
+        report.push('!! 更新AUM 确认框未写出 当前→目标 版本');
+      }
+      if (t.indexOf('采用策略：源码编译') < 0) report.push('!! 更新AUM 确认框未写出采用策略');
+      if (t.indexOf('判定原因') < 0) report.push('!! 更新AUM 确认框未写出判定原因');
+      if (t.indexOf('MB') < 0 && t.indexOf('KB') < 0) report.push('!! 更新AUM 确认框未写出包大小');
+      if (t.indexOf('回滚') < 0) report.push('!! 更新AUM 确认框未说明失败会回滚');
+    }
+    // 确认前不得发起 aum.update
+    let preCalls = await cdp.evaluate("(window.__mock.calls || []).slice()");
+    if (preCalls.some((c) => c.method === 'aum.update')) report.push('!! 未确认就发起了 aum.update');
+    // 取消 → 不更新
+    await cdp.evaluate(`(() => {
+      const masks = Array.from(document.querySelectorAll('.modal-mask'));
+      const m = masks[masks.length - 1];
+      if (!m) return;
+      const b = Array.from(m.querySelectorAll('.m-foot .btn')).find((x) => x.textContent.trim() === '取消');
+      if (b) b.click();
+    })()`);
+    await wait(320);
+    const afterCancel = await cdp.evaluate("(window.__mock.calls || []).slice()");
+    report.push('aum-cancel: ' + JSON.stringify({ updates: afterCancel.filter((c) => c.method === 'aum.update').length }));
+    if (afterCancel.some((c) => c.method === 'aum.update')) report.push('!! 取消后仍然执行了 aum.update');
+
+    // SDK 已就绪时仍应打开安装包（旧版 IS() 支持修复/覆盖安装，前端不得拦截）
+    await cdp.evaluate("document.querySelector('[data-nav=\"dash\"]').click()");
+    await wait(220);
+    await cdp.evaluate("window.__mock.clearCalls()");
+    await cdp.evaluate("document.getElementById('btnSdkInstall').click()");
+    let sdkCalled = false;
+    for (let i = 0; i < 30; i++) {
+      const calls = await cdp.evaluate("(window.__mock.calls || []).slice()");
+      if (calls.some((c) => c.method === 'sdk.install')) { sdkCalled = true; break; }
+      await wait(100);
+    }
+    report.push('sdk-install-while-ready: ' + JSON.stringify({ called: sdkCalled }));
+    if (!sdkCalled) report.push('!! SDK 已就绪时【安装NET.10 SDK】被前端拦截（旧版允许覆盖安装）');
 
     // 1080 宽：4 条链接必须全部可见且在页面内
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1080, height: 700, deviceScaleFactor: 1, mobile: false });
