@@ -208,7 +208,17 @@ async function connect(wsUrl) {
   const baks = fs.readdirSync(exeDir).filter((f) => f.indexOf('.bak-') >= 0 && bakBefore.indexOf(f) < 0);
   say('new backups: ' + JSON.stringify(baks));
 
-  if (FROM && exeVer.indexOf(FROM) === 0) fail('exe 版本仍是 ' + exeVer + '，替换未发生');
+  // 版本比较必须按段数值比：'2.21' 是 '2.21.1.0' 的字符串前缀，用 indexOf 会误判成没升级
+  const cmpVer = (a, b) => {
+    const pa = String(a).trim().split('.').map(Number), pb = String(b).trim().split('.').map(Number);
+    const n = Math.max(pa.length, pb.length);
+    for (let i = 0; i < n; i++) {
+      const x = pa[i] || 0, y = pb[i] || 0;
+      if (x !== y) return x < y ? -1 : 1;
+    }
+    return 0;
+  };
+  if (FROM && cmpVer(exeVer, FROM) <= 0) fail('exe 版本仍是 ' + exeVer + '（未高于起始版本 ' + FROM + '），替换未发生');
   if (!baks.length) fail('未生成 .bak 备份');
   if (/^0\.0|^\s*$/.test(exeVer)) fail('读不到 exe 版本');
 
