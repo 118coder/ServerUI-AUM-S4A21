@@ -25,10 +25,10 @@
     <RootNamespace>ServerUI.Web</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\ServerUI\图标EXE.ico</ApplicationIcon>
-    <Version>2.20</Version>
-    <AssemblyVersion>2.20.0.0</AssemblyVersion>
-    <FileVersion>2.20.0.0</FileVersion>
-    <InformationalVersion>2.20</InformationalVersion>
+    <Version>2.21</Version>
+    <AssemblyVersion>2.21.0.0</AssemblyVersion>
+    <FileVersion>2.21.0.0</FileVersion>
+    <InformationalVersion>2.21</InformationalVersion>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

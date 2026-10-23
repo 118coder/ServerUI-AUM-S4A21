@@ -392,7 +392,11 @@ async function main() {
       await shot('host-dll-drag');
     }
 
-    // 版本号必须为 2.20（标题栏 + 关于卡）
+    // 版本号必须与主程序版本一致（从 app.init 取，避免每次升版改测试）
+    // app.init 里的 version 是程序版本（status.version 是服务端版本，不是一回事）
+    const initProbe = await probe('app.init');
+    const expectVer = (initProbe && initProbe.result && initProbe.result.version) || '';
+    say('expectVersion: ' + expectVer);
     const verInfo = await cdp.evaluate(`(() => ({
       title: document.title,
       tbVer: (document.getElementById('tbVer') || {}).textContent || '',
@@ -404,15 +408,18 @@ async function main() {
     await wait(260);
     verInfo.settingsVer = await cdp.evaluate("(document.querySelector('.set-ver') || {}).textContent || ''");
     say('version: ' + JSON.stringify(verInfo));
-    if (String(verInfo.tbVer).indexOf('v2.20') < 0) fail('标题栏版本不是 v2.20: ' + verInfo.tbVer);
-    if (String(verInfo.title).indexOf('v2.20') < 0) fail('document.title 版本不是 v2.20: ' + verInfo.title);
-    if (String(verInfo.settingsVer).indexOf('v2.20') < 0) fail('设置页版本不是 v2.20: ' + verInfo.settingsVer);
+    if (!expectVer) fail('无法取得主程序版本，版本一致性未验证');
+    else {
+      if (String(verInfo.tbVer).indexOf('v' + expectVer) < 0) fail('标题栏版本不是 v' + expectVer + ': ' + verInfo.tbVer);
+      if (String(verInfo.title).indexOf('v' + expectVer) < 0) fail('document.title 版本不是 v' + expectVer + ': ' + verInfo.title);
+      if (String(verInfo.settingsVer).indexOf('v' + expectVer) < 0) fail('设置页版本不是 v' + expectVer + ': ' + verInfo.settingsVer);
+    }
     const verLog = await cdp.evaluate(`(() => {
       const ls = Array.from(document.querySelectorAll('.log-body .log-line')).map((e) => e.textContent);
       return ls.find((t) => t.indexOf('ServerUI 版本') >= 0) || null;
     })()`);
     say('version-log: ' + JSON.stringify(verLog));
-    if (!verLog || verLog.indexOf('ServerUI 版本: 2.20') < 0) fail('日志缺少「ServerUI 版本: 2.20」: ' + verLog);
+    if (!verLog || verLog.indexOf('ServerUI 版本: ' + expectVer) < 0) fail('日志缺少「ServerUI 版本: ' + expectVer + '」: ' + verLog);
 
     // 主题切换（真实 settings.set 写临时 profile）
     await cdp.evaluate("document.querySelector('[data-nav=\"dash\"]').click()");
