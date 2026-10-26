@@ -67,7 +67,7 @@ internal sealed class AumNetPolicy
 /// </summary>
 internal static class AumNet
 {
-    public const string UserAgent = "ServerUI-AUM-Updater/2.21.1";
+    public const string UserAgent = "ServerUI-AUM-Updater/2.22";
     public const int MaxRedirects = 5;
     public const int ConnectTimeoutSeconds = 15;
     public const int TotalTimeoutSeconds = 180;

@@ -80,7 +80,7 @@ export function renderClassic(pageEl, ctx) {
     h('div.sec-title', [h('span', { text: '服务端控制' })]),
     h('div.ctrl-stack', [
       h('div.btn-row2', [btnStop, btnRestart]),
-      h('div.opt-row', [
+      h('div.opt-row.opt-wrap', [
         h('span.o-label', { text: '可选运行方式' }),
         h('span.o-spacer'),
         dx.seg.el,

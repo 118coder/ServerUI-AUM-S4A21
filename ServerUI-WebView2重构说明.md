@@ -184,3 +184,15 @@ ServerUI-有依赖版.exe --selftest
 - `--updatetest` 用例版本基准改为从夹具真实 FileVersion 推导，夹具优先取与程序同版本的单文件产物（其次 `publish/fd|sc`，最后 `bin`）。这样升版不会再让一批用例假失败。
 - 窗口标题与标题栏版本号改为运行时按 `app.init` 回填（`applyVersionText()`），静态 HTML 里的数字只是首帧占位。
 - 版本 2.21.1；`AUM-version.txt` / csproj / `AppController.Version` / UserAgent / `app.js` 同步。
+
+## 十三、v2.22 变更
+
+- 新增第三种运行方式 **Vulkan（DXVK）**：开始页 / 经典模式「可选运行方式」变成 DX11 / DX12 / Vulkan 三选一。选中后把 `AUM管理组件\DXVK补丁` 下的全部 DLL（d3d8 / d3d9 / d3d10core / d3d11 / dxgi）复制到游戏根目录。
+- 三种方式互斥，切换时整套替换而不是叠加：`DxPatch`（`Bridge/DxPatch.cs`）。两个必须保留的清理动作：
+  - dgVoodoo 的 `D3D9.dll` 与 DXVK 的 `d3d9.dll` 在 Windows 上是同一个文件（不区分大小写），切换时直接覆盖，不能按"存在就跳过"。
+  - 切走 Vulkan 时必须删掉 `d3d8/d3d10core/d3d11/dxgi`，否则这些转发 DLL 会把游戏继续导到 Vulkan，选 dgVoodoo 也不生效。
+- 水印开关（`去除 dgVoodooCpl 水印`）只对 DX11/DX12 有意义：选中 Vulkan 时会自动关闭并置灰，后端也强制 `Watermark=false`。
+- Vulkan 前置提示：检测 `%WINDIR%\SysWOW64\vulkan-1.dll`（32 位客户端实际加载的 loader），缺失时只提示不拦截——玩家可自行取消选择。
+- `--dxtest`：在 %TEMP% 建沙箱（三个补丁目录 + 空游戏根），验证 10 项切换行为（落位、跨模式清理、无水印目录、缺目录拒绝、非法模式回落），不碰真实游戏目录。
+- 使用说明（资料卡）新增 Vulkan 条目说明；`ServerUI-新旧功能对照.md` 增加对应行。
+- 版本 2.22。

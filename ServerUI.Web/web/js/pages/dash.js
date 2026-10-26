@@ -90,7 +90,7 @@ export function renderDash(pageEl, ctx) {
         h('div', { style: { gridColumn: '2 / 3' } }),
         btnRestart,
       ]),
-      h('div.opt-row', [
+      h('div.opt-row.opt-wrap', [
         h('span.o-label', { text: '可选运行方式' }),
         h('span.o-spacer'),
         dx.seg.el,
