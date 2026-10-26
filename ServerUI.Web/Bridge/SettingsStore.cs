@@ -30,7 +30,7 @@ internal sealed class SettingsStore
         public bool LogCollapsed { get; set; }
         /// <summary>去除 dgVoodooCpl 水印</summary>
         public bool Watermark { get; set; }
-        /// <summary>off | dx11 | dx12（默认 off = 原生 DX9）</summary>
+        /// <summary>off | dx11 | dx12 | vulkan（默认 off = 原生 DX9）</summary>
         public string DxMode { get; set; } = "off";
         /// <summary>跳过更新日志（更新时不拉取提交记录）</summary>
         public bool SkipLog { get; set; }
@@ -86,7 +86,8 @@ internal sealed class SettingsStore
     private void Normalize()
     {
         if (Current.Theme != "light" && Current.Theme != "dark") Current.Theme = "dark";
-        if (Current.DxMode != "dx11" && Current.DxMode != "dx12") Current.DxMode = "off";
+        if (Current.DxMode != "dx11" && Current.DxMode != "dx12" && Current.DxMode != "vulkan") Current.DxMode = "off";
+        if (Current.DxMode == "vulkan") Current.Watermark = false;   // DXVK 没有 dgVoodoo 水印
         if (Current.LogHeight < 80) Current.LogHeight = 80;
         if (Current.LogHeight > 420) Current.LogHeight = 420;
     }

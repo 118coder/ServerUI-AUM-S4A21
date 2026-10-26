@@ -471,6 +471,12 @@ const MOCK = String.raw`
       case 'server.stop': calls.push({ method: 'server.stop' }); reply(id, { ok: true }); break;
       case 'server.restart': calls.push({ method: 'server.restart' }); reply(id, { ok: true }); break;
       case 'sdk.install': calls.push({ method: 'sdk.install' }); reply(id, { ok: true }); break;
+      case 'dx.set':
+        calls.push({ method: 'dx.set', mode: a.mode, watermark: !!a.watermark });
+        settings.dxMode = a.mode;
+        settings.watermark = !!a.watermark;
+        reply(id, { ok: true, mode: a.mode, watermark: !!a.watermark });
+        break;
       case 'aum.plan':
         calls.push({ method: 'aum.plan', forcePackage: !!a.forcePackage });
         reply(id, {
@@ -2192,6 +2198,57 @@ async function main() {
     }
     report.push('sdk-install-while-ready: ' + JSON.stringify({ called: sdkCalled }));
     if (!sdkCalled) report.push('!! SDK 已就绪时【安装NET.10 SDK】被前端拦截（旧版允许覆盖安装）');
+
+    // 可选运行方式：DX11 / DX12 / Vulkan 三选一，Vulkan 时必须禁用去水印开关
+    await cdp.evaluate("window.__mock.clearCalls()");
+    const dxVk = await cdp.evaluate(`(() => {
+      const segs = Array.from(document.querySelectorAll('#page .segmented .seg'));
+      const vk = segs.find((x) => x.dataset.value === 'vulkan');
+      const sw = document.querySelector('#page .switch');
+      if (!vk) return { found: false };
+      vk.click();
+      return { found: true, swDisabledAfter: !!(sw && sw.hasAttribute('disabled')), swOn: !!(sw && sw.classList.contains('on')) };
+    })()`);
+    await wait(300);
+    let dxCalls = await cdp.evaluate("(window.__mock.calls || []).slice()");
+    const vkCall = dxCalls.find((c) => c.method === 'dx.set');
+    report.push('dx-vulkan: ' + JSON.stringify({ vk: dxVk, call: vkCall || null }));
+    if (!dxVk.found) report.push('!! 未找到 Vulkan 运行方式选项');
+    else {
+      if (!vkCall || vkCall.mode !== 'vulkan') report.push('!! 点击 Vulkan 未下发 dx.set(mode=vulkan)');
+      if (vkCall && vkCall.watermark) report.push('!! Vulkan 模式下仍带着 watermark=true');
+      if (!dxVk.swDisabledAfter) report.push('!! 选中 Vulkan 后去水印开关未禁用');
+    }
+
+    // 切回 DX11：开关恢复可用；再点一次取消 → dx.set(mode=off)
+    await cdp.evaluate("window.__mock.clearCalls()");
+    await cdp.evaluate(`(() => {
+      const segs = Array.from(document.querySelectorAll('#page .segmented .seg'));
+      const d11 = segs.find((x) => x.dataset.value === 'dx11');
+      if (d11) d11.click();
+    })()`);
+    await wait(280);
+    const dx11State = await cdp.evaluate(`(() => {
+      const sw = document.querySelector('#page .switch');
+      return { swDisabled: !!(sw && sw.hasAttribute('disabled')), swOn: !!(sw && sw.classList.contains('on')) };
+    })()`);
+    dxCalls = await cdp.evaluate("(window.__mock.calls || []).slice()");
+    const d11Call = dxCalls.find((c) => c.method === 'dx.set');
+    report.push('dx-back-dx11: ' + JSON.stringify({ state: dx11State, call: d11Call || null }));
+    if (!d11Call || d11Call.mode !== 'dx11') report.push('!! 切回 DX11 未下发 dx.set(mode=dx11)');
+    if (dx11State.swDisabled) report.push('!! 切回 DX11 后去水印开关仍被禁用');
+
+    await cdp.evaluate("window.__mock.clearCalls()");
+    await cdp.evaluate(`(() => {
+      const segs = Array.from(document.querySelectorAll('#page .segmented .seg'));
+      const d11 = segs.find((x) => x.dataset.value === 'dx11');
+      if (d11) d11.click();   // 再点已选项 = 取消
+    })()`);
+    await wait(280);
+    dxCalls = await cdp.evaluate("(window.__mock.calls || []).slice()");
+    const offCall = dxCalls.find((c) => c.method === 'dx.set');
+    report.push('dx-cancel: ' + JSON.stringify({ call: offCall || null }));
+    if (!offCall || offCall.mode !== 'off') report.push('!! 取消运行方式未下发 dx.set(mode=off)');
 
     // 1080 宽：4 条链接必须全部可见且在页面内
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1080, height: 700, deviceScaleFactor: 1, mobile: false });

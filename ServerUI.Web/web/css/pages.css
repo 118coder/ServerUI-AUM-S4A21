@@ -115,6 +115,11 @@
 }
 .opt-row > .o-spacer { flex: 1 1 auto; }
 
+/* 运行方式分段有 3 项（DX11 / DX12 / Vulkan），窄窗口放不下时整体折到下一行右对齐，
+   避免分段控件被卡片裁切 */
+.opt-row.opt-wrap { flex-wrap: wrap; row-gap: 8px; }
+.opt-row.opt-wrap > .segmented { margin-left: auto; }
+
 /* 更新区信息行 */
 .info-line {
   display: flex;

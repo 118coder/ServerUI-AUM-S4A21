@@ -62,6 +62,8 @@ internal static class Paths
 
     public static string Dx11Dir => Path.Combine(Ad, "DX11补丁");
     public static string Dx12Dir => Path.Combine(Ad, "DX12补丁");
+    /// <summary>DXVK（Vulkan）补丁</summary>
+    public static string DxvkDir => Path.Combine(Ad, "DXVK补丁");
     public static string ToolPackDir => Path.Combine(Ad, "实用工具包");
     public static string PatchDir => Path.Combine(ToolPackDir, "DLL覆盖");
     public static string PatchZip => Path.Combine(PatchDir, "客户端补丁.zip");

@@ -36,15 +36,15 @@ export const HELP_ITEMS = [
     group: "运行方式",
     name: "可选运行方式",
     icon: "ThunderboltOutlined",
-    title: "可选运行方式（DX11 / DX12）",
-    body: "为兼容不同显卡，选择游戏的渲染运行方式。\n\n使用方法：\n  1. 点击「以DX11方式运行游戏」或「以DX12方式运行游戏」\n  2. 程序自动把对应补丁文件（D3D9.dll / dgVoodoo.conf 等）复制到游戏目录\n  3. 点击「开始游戏」即可生效\n\n提示：\n· 两种方式只能二选一\n· 如果游戏无法正常游玩，请取消选择相关可选运行方式\n· 补丁目录为 AUM管理组件\\DX11补丁 与 DX12补丁\n\n切换运行方式方式，对游戏性能提升有限，建议使用原生运行方式（DX9）进行游戏",
+    title: "可选运行方式（DX11 / DX12 / Vulkan）",
+    body: "为兼容不同显卡与驱动，选择游戏的渲染方式。三种方式互斥，点中即生效；再点一次取消，恢复原生 DX9。\n\n三种方式：\n· DX11 / DX12 — dgVoodoo 转译：把 DX9 调用转到 DX11/DX12\n  补丁目录：AUM管理组件\\DX11补丁 与 DX12补丁\n  文件：D3D9.dll / dgVoodoo.conf / dgVoodooCpl.exe\n\n· Vulkan — DXVK 转译：把 DX8/9/10/11 调用转到 Vulkan\n  补丁目录：AUM管理组件\\DXVK补丁\n  文件：d3d8.dll / d3d9.dll / d3d10core.dll / d3d11.dll / dxgi.dll\n\n使用方法：\n  1. 点击对应选项，程序自动把补丁复制到游戏根目录，并清理另一种方式的残留文件\n  2. 启动游戏即可生效\n\n提示：\n· 三种方式只能选一个；切换前请完全关闭游戏客户端（DLL 被占用会写入失败）\n· Vulkan 需要显卡驱动支持；未检测到 Vulkan 运行库时会提示，游戏可能无法启动\n· 换渲染方式对性能提升有限，建议优先使用原生 DX9\n· 如果游戏黑屏、花屏或无法启动，请取消选择相关可选运行方式",
   },
   {
     group: "运行方式",
     name: "去除水印的方式",
     icon: "WatermarkOutlined",
     title: "去除dgVoodooCpl水印",
-    body: "使用无水印版本的 dgVoodoo 补丁。\n\n使用方法：\n  1. 先选择 DX11 或 DX12 运行方式\n  2. 打开本开关\n  3. 程序自动改用「无水印」目录下的补丁文件\n\n提示：必须搭配 DX11/DX12 使用，单独开启无效",
+    body: "使用无水印版本的 dgVoodoo 补丁（仅 DX11 / DX12 有效）。\n\n使用方法：\n  1. 先选择 DX11 或 DX12 运行方式\n  2. 打开本开关\n  3. 程序自动改用「无水印」目录下的补丁文件\n\n提示：\n· 必须搭配 DX11 / DX12 使用，单独开启无效\n· Vulkan（DXVK）不使用 dgVoodoo，选中 Vulkan 时本开关会自动关闭并置灰",
   },
   {
     group: "目录与工具",

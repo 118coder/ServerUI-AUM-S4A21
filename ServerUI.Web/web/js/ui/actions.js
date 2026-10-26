@@ -114,10 +114,14 @@ export function wireRestorePvf(btn, ctx) {
 export function createDxControls(ctx, opts) {
   const o = opts || {};
   const settings = (ctx && ctx.settings) || {};
-  const dxMode = (settings.dxMode === 'dx11' || settings.dxMode === 'dx12') ? settings.dxMode : null;
+  const MODES = ['dx11', 'dx12', 'vulkan'];
+  const MODE_LABEL = { dx11: 'DX11', dx12: 'DX12', vulkan: 'Vulkan' };
+  const dxMode = MODES.indexOf(settings.dxMode) >= 0 ? settings.dxMode : null;
 
   function pushDx(mode, watermark, note) {
-    call('dx.set', { mode: mode || 'off', watermark: !!watermark }).then(() => {
+    call('dx.set', { mode: mode || 'off', watermark: !!watermark }).then((res) => {
+      // 宿主没真正切换（补丁缺失 / 文件被游戏占用）时保持原状态，别让界面假装成功
+      if (res && res.ok === false) return;
       settings.dxMode = mode || 'off';
       settings.watermark = !!watermark;
       if (note) say(ctx, 'secondary', '>>> [运行方式] ' + note);
@@ -132,15 +136,31 @@ export function createDxControls(ctx, opts) {
     onChange: (on) => pushDx(seg.get(), on, on ? '已开启去除水印' : '已关闭去除水印'),
   });
 
+  /** Vulkan 走 DXVK，没有 dgVoodoo 水印：选中时强制关掉并禁用开关。 */
+  function syncWatermark(mode) {
+    const vk = mode === 'vulkan';
+    if (vk && sw.get()) { sw.set(false, true); settings.watermark = false; }
+    sw.disable(vk);
+    if (vk) sw.el.setAttribute('data-tip', 'Vulkan 方式不使用 dgVoodoo，无需去水印');
+    else sw.el.removeAttribute('data-tip');
+  }
+
   const seg = createSegmented({
     items: [
       // 经典模式左栏窄：用短标签，避免分段控件把卡片撑出可视区
       { value: 'dx11', text: o.short ? 'DX11' : '以DX11方式运行游戏' },
       { value: 'dx12', text: o.short ? 'DX12' : '以DX12方式运行游戏' },
+      { value: 'vulkan', text: o.short ? 'Vulkan' : '以Vulkan方式运行游戏' },
     ],
     value: dxMode,
-    onChange: (val) => pushDx(val, sw.get(), val ? ('已启用 ' + val.toUpperCase()) : '已取消运行方式，恢复默认 DX9'),
+    onChange: (val) => {
+      syncWatermark(val);
+      const label = MODE_LABEL[val];
+      pushDx(val, sw.get(), val ? ('已启用 ' + label + ' 方式') : '已取消运行方式，恢复默认 DX9');
+    },
   });
+
+  syncWatermark(dxMode);
 
   return { seg, sw };
 }

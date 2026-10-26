@@ -46,7 +46,7 @@ const SUB = {
 
 // ------------------------------------------------------------------ 全局状态
 const state = {
-  version: '2.21.1',
+  version: '2.22',
   theme: 'dark',
   page: 'dash',
   mode: 'full',

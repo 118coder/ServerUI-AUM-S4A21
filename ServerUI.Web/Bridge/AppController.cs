@@ -20,7 +20,7 @@ namespace ServerUI.Web.Bridge;
 /// </summary>
 internal sealed class AppController
 {
-    internal const string Version = "2.21.1";
+    internal const string Version = "2.22";
 
     // ---- 日志等级（对应旧 Lg 的 Color 语义；前端按 §6.4 配色） ----
     internal const string LDefault = "default";     // (240,240,245)
@@ -449,7 +449,7 @@ internal sealed class AppController
         // 上次更新信息（从 更新日志.txt 读取，走服务内缓存）
         var luText = LastUpdateText(out var luLevel);
 
-        var version = "2.21.1";
+        var version = "2.22";
         try { version = Updater.GetVersion(Paths.Ad); } catch { }
 
         var snapshot = BuildSnapshot(bat, dfo, stText, stLevel, luText, luLevel, version);
@@ -522,7 +522,7 @@ internal sealed class AppController
         else { stText = "● 未运行"; stLevel = LError; }
 
         var luText = LastUpdateText(out var luLevel);
-        var version = "2.21.1";
+        var version = "2.22";
         try { version = Updater.GetVersion(Paths.Ad); } catch { }
 
         return BuildSnapshot(bat, dfo, stText, stLevel, luText, luLevel, version);
@@ -673,87 +673,29 @@ internal sealed class AppController
 
     public object DxSet(string mode, bool watermark)
     {
-        var dx11 = mode == "dx11";
-        var dx12 = mode == "dx12";
+        var r = DxPatch.Apply(mode, watermark, Paths.Ad, Paths.Gr);
 
-        if (dx11 || dx12)
-            L(">>> 提示: 如果游戏无法正常游玩，请取消选择相关可选运行方式", LWarning);
+        // 日志按「先提示、后结果」的顺序原样输出（旧行为：切到非 DX9 先提示可取消）
+        foreach (var m in r.Messages)
+            L(m.Text, m.Level == "success" ? LSuccess
+                : m.Level == "warning" ? LWarning
+                : m.Level == "error" ? LError : LSecondary);
 
-        var files = new[] { "D3D9.dll", "dgVoodoo.conf", "dgVoodooCpl.exe" };
-        string srcDir = null;
-        var tag = "";
-
-        if (dx12)
+        if (!r.Ok)
         {
-            srcDir = Paths.Dx12Dir; tag = " (DX12)";
-            if (!Directory.Exists(srcDir)) { L("DX12补丁目录不存在: " + srcDir, LWarning); return Persist(mode, watermark); }
-            if (watermark)
-            {
-                var wm = Path.Combine(srcDir, "无水印");
-                if (Directory.Exists(wm)) { srcDir = wm; tag = " (DX12无水印版)"; }
-                else L("DX12无水印目录不存在", LWarning);
-            }
+            // 补丁没有真正切换成功时不要落盘：否则界面上显示已选中，实际游戏目录没变
+            return new { ok = false, error = r.Error, mode = _store.Current.DxMode, watermark = _store.Current.Watermark };
         }
-        else if (dx11)
-        {
-            srcDir = Paths.Dx11Dir; tag = " (DX11)";
-            if (!Directory.Exists(srcDir)) { L("DX11补丁目录不存在: " + srcDir, LWarning); return Persist(mode, watermark); }
-            if (watermark)
-            {
-                var wm = Path.Combine(srcDir, "无水印");
-                if (Directory.Exists(wm)) { srcDir = wm; tag = " (DX11无水印版)"; }
-                else L("DX11无水印目录不存在", LWarning);
-            }
-        }
-        else if (watermark)
-        {
-            L("请先选择 DX11 或 DX12 运行模式再启用水印", LWarning);
-            return Persist(mode, watermark);
-        }
-
-        if (srcDir != null)
-        {
-            var copied = 0;
-            try
-            {
-                foreach (var fn in files)
-                {
-                    var src = Path.Combine(srcDir, fn);
-                    var dst = Path.Combine(Paths.Gr, fn);
-                    if (File.Exists(src)) { File.Copy(src, dst, true); copied++; }
-                }
-            }
-            catch (Exception ex)
-            {
-                // 游戏运行中时 D3D9.dll 等被锁定 → IOException（旧代码无捕获会崩全局错误框）
-                L(">>> DX补丁复制失败: " + ex.Message, LError);
-                L("DX补丁复制失败：文件可能正被游戏占用。请完全关闭游戏客户端后重试。", LError);
-                return new { ok = false, error = ex.Message };
-            }
-            L("DX补丁已复制到游戏目录" + tag + " (" + copied + " 个文件)", LSuccess);
-            Persist(mode, watermark);
-            return new { ok = true, mode, watermark, copied };
-        }
-
-        // 默认 DX9 → 从游戏目录删除补丁文件
-        var removed = 0;
-        foreach (var fn in files)
-        {
-            var dst = Path.Combine(Paths.Gr, fn);
-            if (!File.Exists(dst)) continue;
-            try { File.Delete(dst); removed++; } catch { }
-        }
-        L("已切换为默认DX9运行，DX补丁已从游戏目录移除 (" + removed + " 个文件)", LSecondary);
-        Persist(mode, watermark);
-        return new { ok = true, mode = "off", watermark = false, removed };
+        Persist(r.Mode, r.Watermark);
+        return new { ok = true, mode = _store.Current.DxMode, watermark = _store.Current.Watermark, copied = r.Copied, removed = r.Removed };
     }
 
     private object Persist(string mode, bool watermark)
     {
-        _store.Current.DxMode = mode == "dx11" || mode == "dx12" ? mode : "off";
-        _store.Current.Watermark = watermark;
+        _store.Current.DxMode = DxPatch.NormalizeMode(mode);
+        _store.Current.Watermark = _store.Current.DxMode == DxPatch.ModeVulkan ? false : watermark;
         _store.Save();
-        return new { ok = true, mode = _store.Current.DxMode, watermark };
+        return new { ok = true, mode = _store.Current.DxMode, watermark = _store.Current.Watermark };
     }
 
     // ================================================================
