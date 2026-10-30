@@ -143,6 +143,20 @@ public sealed partial class App : Application
             return;
         }
 
+        // ---- DLL 扩展沙箱测试（临时目录，不碰真实游戏目录）----
+        if (args.Length > 0 && args[0] == "--dlltest")
+        {
+            int code;
+            try { code = DllTests.Run(args); }
+            catch (Exception ex)
+            {
+                try { Console.Error.WriteLine(ex); } catch { }
+                code = 3;
+            }
+            Shutdown(code);
+            return;
+        }
+
         // ---- 多开路径验证（仅沙箱：exe 目录须有 playtest.marker）----
         if (args.Length > 0 && args[0] == "--playtest")
         {
