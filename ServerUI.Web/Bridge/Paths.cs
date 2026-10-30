@@ -14,22 +14,26 @@ internal static class Paths
     /// <summary>_bd</summary>
     public static string Base => AppContext.BaseDirectory.TrimEnd('\\', '/');
 
-    /// <summary>_ad</summary>
+    /// <summary>_ad（AUM_AD_ROOT 可覆盖：测试把补丁/ini 指到临时沙箱，不碰真实目录）</summary>
     public static string Ad
     {
         get
         {
+            var over = Environment.GetEnvironmentVariable("AUM_AD_ROOT");
+            if (!string.IsNullOrWhiteSpace(over)) return over.TrimEnd('\\', '/');
             var b = Base;
             var sub = Path.Combine(b, "AUM管理组件");
             return Directory.Exists(sub) ? sub : b;
         }
     }
 
-    /// <summary>_gr</summary>
+    /// <summary>_gr（AUM_GR_ROOT 可覆盖，理由同上）</summary>
     public static string Gr
     {
         get
         {
+            var over = Environment.GetEnvironmentVariable("AUM_GR_ROOT");
+            if (!string.IsNullOrWhiteSpace(over)) return over.TrimEnd('\\', '/');
             var ad = Ad;
             var p = Directory.GetParent(ad);
             return p != null ? p.FullName : ad;

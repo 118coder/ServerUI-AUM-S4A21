@@ -111,13 +111,6 @@ internal sealed class DllController
                 if (!_managedOrder.Contains(p.File, StringComparer.OrdinalIgnoreCase))
                     _managedOrder.Add(p.File);
         }
-        if (_customOrder.Count != customInFile.Count ||
-            !_customOrder.SequenceEqual(customInFile, StringComparer.OrdinalIgnoreCase))
-        {
-            _customOrder.Clear();
-            _customOrder.AddRange(customInFile);
-        }
-
         var loaderInstalled = File.Exists(Path.Combine(Paths.Gr, "GameGaurd.dll"))
             || File.Exists(Path.Combine(Paths.Gr, "az.dll"));
         var installed = loaderInstalled || hasPlugins;
@@ -142,9 +135,26 @@ internal sealed class DllController
             });
         }
 
+        // 自定义扩展行 = 已添加清单 ∪ ini 里的非受管条目（兼容玩家用启动器手动挂载的）。
+        // 关键：清单里的条目即使被取消勾选（已从 ini 移除）也要留在界面上，否则开关一点行就没了。
+        var known = DllCustomStore.Load(Paths.DataRoot);
+        foreach (var f in customInFile)
+            if (!known.Contains(f, StringComparer.OrdinalIgnoreCase)) known.Add(f);
+
+        // 显示顺序：内存里的顺序（拖拽结果）优先，其余按清单顺序补齐
+        var customFiles = new List<string>();
+        foreach (var f in _customOrder)
+            if (known.Contains(f, StringComparer.OrdinalIgnoreCase) && !customFiles.Contains(f, StringComparer.OrdinalIgnoreCase))
+                customFiles.Add(f);
+        foreach (var f in known)
+            if (!customFiles.Contains(f, StringComparer.OrdinalIgnoreCase)) customFiles.Add(f);
+
+        _customOrder.Clear();
+        _customOrder.AddRange(customFiles);
+
         var custom = new List<object>();
         var onCustom = 0;
-        foreach (var f in _customOrder)
+        foreach (var f in customFiles)
         {
             var on = iniSet.Contains(f);
             if (on) onCustom++;
@@ -288,8 +298,10 @@ internal sealed class DllController
         var ext = Path.GetExtension(file).ToLowerInvariant();
         if (ext != ".dll" && ext != ".ini") return new { ok = false, error = "只接受 .dll / .ini" };
         if (IsManaged(file)) return new { ok = false, error = "「" + file + "」是内置受管插件，请直接用列表里的开关勾选挂载。" };
-        if (_customOrder.Contains(file, StringComparer.OrdinalIgnoreCase))
-            return new { ok = false, error = "「" + file + "」已在挂载列表中。" };
+        // 已添加但被取消勾选的条目也在清单里：此时重复添加应提示「已在列表中」，而不是当成新文件
+        if (_customOrder.Contains(file, StringComparer.OrdinalIgnoreCase)
+            || DllCustomStore.Load(Paths.DataRoot).Contains(file, StringComparer.OrdinalIgnoreCase))
+            return new { ok = false, error = "「" + file + "」已在扩展列表中（勾选开关即可重新挂载）。" };
 
         var dst = GameRootFile(file);
         try
@@ -300,10 +312,17 @@ internal sealed class DllController
                 _ui.Log(AppController.LSuccess, ">>> [DLL扩展] 已复制自定义扩展 → " + dst);
             }
 
+            // 新加的扩展默认勾选挂载；其余已添加的按 ini 现状（未勾选的不写回，但仍留在清单里）
             var existing = ReadNonManaged();
             if (!existing.Contains(file, StringComparer.OrdinalIgnoreCase)) existing.Add(file);
+
+            // 记进「已添加」清单：取消勾选后行要留在界面上，只有【删除扩展】才移除
+            var known = DllCustomStore.Load(Paths.DataRoot);
+            if (!known.Contains(file, StringComparer.OrdinalIgnoreCase)) known.Add(file);
+            DllCustomStore.Save(Paths.DataRoot, known);
+
             _customOrder.Clear();
-            _customOrder.AddRange(existing);
+            _customOrder.AddRange(known);
 
             var enabled = new List<string>();
             var iniSet = IniSetFromIni();
@@ -331,6 +350,12 @@ internal sealed class DllController
         {
             RemovePluginFromIni(Paths.GameGaurdIni, file);
             _customOrder.RemoveAll(x => x.Equals(file, StringComparison.OrdinalIgnoreCase));
+
+            // 只有【删除扩展】才把条目从「已添加」清单里去掉（取消勾选只影响挂载）
+            var known = DllCustomStore.Load(Paths.DataRoot);
+            known.RemoveAll(x => x.Equals(file, StringComparison.OrdinalIgnoreCase));
+            DllCustomStore.Save(Paths.DataRoot, known);
+
             _ui.Log(AppController.LSuccess, ">>> [DLL扩展] 已从 GameGaurd.ini 移除: " + file);
         }
         catch (Exception ex)

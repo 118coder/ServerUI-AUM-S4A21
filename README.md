@@ -4,7 +4,7 @@
 
 ---
 
-> **v2.22 界面说明（2026-10-27）**：主界面已迁移到 .NET 10 WPF + WebView2，保留原配色、布局与全部功能；`ServerUI-兼容模式.exe` 与 `开始游戏-ServerUI.exe` 继续提供 Win7/旧入口。新版需要 WebView2 Runtime（Win10/11 通常已自带）。可选运行方式现有 **DX11 / DX12（dgVoodoo）与 Vulkan（DXVK）** 三种，选中即把对应补丁复制到游戏根目录。【更新AUM】为双通道：有 .NET 10 SDK + PowerShell 5.1 + 源码结构时优先源码编译，否则下载 GitHub Release 发行包校验后原子替换（`--healthcheck` 自检 + `.bak` 备份可回滚）。详见 `ServerUI-WebView2重构说明.md` 与 `ServerUI.Web/docs/AUM-UPDATE.md`。
+> **v2.23 界面说明（2026-10-30）**：主界面已迁移到 .NET 10 WPF + WebView2，保留原配色、布局与全部功能；`ServerUI-兼容模式.exe` 与 `开始游戏-ServerUI.exe` 继续提供 Win7/旧入口。新版需要 WebView2 Runtime（Win10/11 通常已自带）。可选运行方式现有 **DX11 / DX12（dgVoodoo）与 Vulkan（DXVK）** 三种，选中即把对应补丁复制到游戏根目录。【更新AUM】为双通道：有 .NET 10 SDK + PowerShell 5.1 + 源码结构时优先源码编译，否则下载 GitHub Release 发行包校验后原子替换（`--healthcheck` 自检 + `.bak` 备份可回滚）。详见 `ServerUI-WebView2重构说明.md` 与 `ServerUI.Web/docs/AUM-UPDATE.md`。
 
 
 ## 项目简介

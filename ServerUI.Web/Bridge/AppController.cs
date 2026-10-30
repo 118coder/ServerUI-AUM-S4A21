@@ -20,7 +20,7 @@ namespace ServerUI.Web.Bridge;
 /// </summary>
 internal sealed class AppController
 {
-    internal const string Version = "2.22";
+    internal const string Version = "2.23";
 
     // ---- 日志等级（对应旧 Lg 的 Color 语义；前端按 §6.4 配色） ----
     internal const string LDefault = "default";     // (240,240,245)
@@ -449,7 +449,7 @@ internal sealed class AppController
         // 上次更新信息（从 更新日志.txt 读取，走服务内缓存）
         var luText = LastUpdateText(out var luLevel);
 
-        var version = "2.22";
+        var version = "2.23";
         try { version = Updater.GetVersion(Paths.Ad); } catch { }
 
         var snapshot = BuildSnapshot(bat, dfo, stText, stLevel, luText, luLevel, version);
@@ -522,7 +522,7 @@ internal sealed class AppController
         else { stText = "● 未运行"; stLevel = LError; }
 
         var luText = LastUpdateText(out var luLevel);
-        var version = "2.22";
+        var version = "2.23";
         try { version = Updater.GetVersion(Paths.Ad); } catch { }
 
         return BuildSnapshot(bat, dfo, stText, stLevel, luText, luLevel, version);

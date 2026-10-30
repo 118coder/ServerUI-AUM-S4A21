@@ -565,9 +565,23 @@ const MOCK = String.raw`
         });
         break;
       }
-      case 'dll.apply': reply(id, { ok: true, applied: true, managed: 8, custom: 2 }); break;
+      case 'dll.apply':
+        // 与宿主一致：取消勾选只改挂载状态，行仍留在列表（custom 里 on=false，但条目还在）
+        calls.push({ method: 'dll.apply', customOn: (a.customOn || []).slice() });
+        if (Array.isArray(a.customOn)) {
+          for (const f of customOrder) {
+            const c = customDefs.find((x) => x[0] === f);
+            if (c) c[1] = a.customOn.indexOf(f) >= 0;
+          }
+        }
+        reply(id, { ok: true, applied: true, managed: 8, custom: (a.customOn || []).length });
+        break;
+      case 'dll.delete':
+        calls.push({ method: 'dll.delete', file: a.file });
+        customOrder = customOrder.filter((f) => f !== a.file);
+        reply(id, { ok: true, state: dllState() });
+        break;
       case 'dll.add': reply(id, { ok: true, state: dllState() }); break;
-      case 'dll.delete': reply(id, { ok: true, state: dllState() }); break;
       case 'dll.readConfig':
         reply(id, {
           ok: true, file: a.file, path: GR + '\\' + a.file,
@@ -1646,6 +1660,48 @@ async function main() {
     await cdp.evaluate(`(() => { const b = Array.from(document.querySelectorAll('.modal-mask .m-foot .btn')).find((x) => x.textContent.trim() === '取消'); if (b) b.click(); })()`);
     await wait(160);
 
+    // 自定义扩展开关 = 只是挂载：取消勾选并应用后，行必须留在列表里（不能消失）
+    const customKeep = await cdp.evaluate(`(() => {
+      const rows = Array.from(document.querySelectorAll('.dll-row.custom'));
+      const target = rows[0];
+      if (!target) return { found: false };
+      const file = target.dataset.file;
+      const sw = target.querySelector('.switch');
+      if (sw.classList.contains('on')) sw.click();      // 关掉
+      const btn = document.getElementById('btnDllApply');
+      if (!btn) return { found: true, file, noApply: true };
+      btn.click();
+      return { found: true, file, beforeCount: rows.length };
+    })()`);
+    await wait(320);
+    // 确认框 → 点「写入 GameGaurd.ini」
+    await cdp.evaluate(`(() => {
+      const masks = Array.from(document.querySelectorAll('.modal-mask'));
+      const m = masks[masks.length - 1];
+      if (!m) return;
+      const b = Array.from(m.querySelectorAll('.m-foot .btn')).find((x) => x.textContent.trim() === '写入 GameGaurd.ini');
+      if (b) b.click();
+    })()`);
+    await wait(420);
+    const customAfter = await cdp.evaluate(`(() => {
+      const rows = Array.from(document.querySelectorAll('.dll-row.custom'));
+      const t = rows.find((r) => r.dataset.file === ${JSON.stringify(customKeep.file || '')});
+      return {
+        count: rows.length,
+        stillThere: !!t,
+        on: t ? t.querySelector('.switch').classList.contains('on') : null
+      };
+    })()`);
+    report.push('dll-custom-keep: ' + JSON.stringify({ before: customKeep, after: customAfter }));
+    if (!customKeep.found) report.push('!! 未找到自定义扩展行');
+    else {
+      if (!customAfter.stillThere) report.push('!! 取消勾选并应用后，自定义扩展行从界面消失了（应只在【删除扩展】后才消失）');
+      if (customAfter.stillThere && customAfter.on) report.push('!! 取消勾选后开关仍显示为开启');
+      if (customKeep.beforeCount && customAfter.count !== customKeep.beforeCount) {
+        report.push('!! 取消勾选后行数变化：' + customKeep.beforeCount + ' → ' + customAfter.count);
+      }
+    }
+
     // INI 分组编辑器
     await cdp.evaluate("document.querySelector('.dll-edit').click()");
     await wait(450);
@@ -2209,7 +2265,7 @@ async function main() {
       vk.click();
       return { found: true, swDisabledAfter: !!(sw && sw.hasAttribute('disabled')), swOn: !!(sw && sw.classList.contains('on')) };
     })()`);
-    await wait(300);
+    await waitForCall(cdp, 'dx.set');
     let dxCalls = await cdp.evaluate("(window.__mock.calls || []).slice()");
     const vkCall = dxCalls.find((c) => c.method === 'dx.set');
     report.push('dx-vulkan: ' + JSON.stringify({ vk: dxVk, call: vkCall || null }));
@@ -2227,7 +2283,7 @@ async function main() {
       const d11 = segs.find((x) => x.dataset.value === 'dx11');
       if (d11) d11.click();
     })()`);
-    await wait(280);
+    await waitForCall(cdp, 'dx.set');
     const dx11State = await cdp.evaluate(`(() => {
       const sw = document.querySelector('#page .switch');
       return { swDisabled: !!(sw && sw.hasAttribute('disabled')), swOn: !!(sw && sw.classList.contains('on')) };
@@ -2244,7 +2300,7 @@ async function main() {
       const d11 = segs.find((x) => x.dataset.value === 'dx11');
       if (d11) d11.click();   // 再点已选项 = 取消
     })()`);
-    await wait(280);
+    await waitForCall(cdp, 'dx.set');
     dxCalls = await cdp.evaluate("(window.__mock.calls || []).slice()");
     const offCall = dxCalls.find((c) => c.method === 'dx.set');
     report.push('dx-cancel: ' + JSON.stringify({ call: offCall || null }));

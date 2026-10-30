@@ -20,7 +20,7 @@ import { call } from '../bridge.js';
 
 const SUB = '客户端补丁挂载 · 勾选即写入 GameGaurd.ini 的 [Plugins] 列表（顺序生效）';
 const LIST_HEAD = '已安装插件（勾选 = 挂载；行首手柄图标可拖拽调整加载顺序，底部为玩家自定义扩展）';
-const CUSTOM_CAP = '—— 自定义扩展（开关 = 挂载，行尾可删除）——';
+const CUSTOM_CAP = '—— 自定义扩展（开关 = 挂载，关闭时行保留，行尾可删除）——';
 const CUSTOM_EMPTY = '—— 暂无自定义扩展（点击下方【添加扩展】挂载自己的插件）——';
 const UNINSTALLED_CAP = '—— 未安装 DLL 扩展 ——';
 const UNINSTALLED_TIP = '游戏根目录尚未安装客户端补丁（未发现挂载器 GameGaurd.dll / az.dll，且 GameGaurd.ini 无插件记录）。\n\n'
